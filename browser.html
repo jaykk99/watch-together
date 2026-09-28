@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0b12">
+<title>Watch Together — Browser</title>
+<style>
+:root{--bg:#0b0b12;--card:#171725;--fg:#f2f2f7;--mut:#8b8ba3;--acc:#7c5cff;--ok:#2ecc71;--bad:#ff5c7a}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+body{padding:env(safe-area-inset-top) 12px env(safe-area-inset-bottom)}
+.wrap{max-width:900px;margin:0 auto;padding:16px 0}
+h1{font-size:24px;margin:6px 0 4px}p.sub{color:var(--mut);margin:0 0 20px}
+.card{background:var(--card);border-radius:16px;padding:16px;margin-bottom:12px}
+button{font:inherit;border:0;border-radius:12px;padding:14px 18px;background:var(--acc);color:#fff;font-weight:600;width:100%}
+button.sec{background:#26263a}button:disabled{opacity:.5}
+input{width:100%;font:inherit;padding:14px;border-radius:12px;border:1px solid #2b2b42;background:#0f0f1a;color:var(--fg)}
+input.code{font-size:32px;text-align:center;letter-spacing:.4em;margin:10px 0}
+.row{display:flex;gap:10px;align-items:center}.row>*{flex:1}
+.hide{display:none!important}
+.big{font-size:40px;font-weight:800;letter-spacing:.25em;text-align:center;margin:4px 0}
+.pill{display:inline-block;padding:4px 10px;border-radius:99px;font-size:13px;background:#26263a;color:var(--mut);text-align:center}
+.pill.on{background:#12351f;color:var(--ok)}
+.stage{position:relative;background:#000;border-radius:14px;overflow:hidden;aspect-ratio:16/9;width:100%}
+.stage iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.shield{position:absolute;inset:0;z-index:5}
+.msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;color:var(--mut)}
+small{color:var(--mut)}.err{color:var(--bad);min-height:1em;margin:8px 0 0}
+a{color:var(--acc)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<section id="home">
+ <h1>🌐 Watch Together Browser</h1>
+ <p class="sub">The host drives a cloud browser (ads blocked). Everyone in the room sees it live.</p>
+ <div class="card"><button id="hostBtn">Host a room</button></div>
+ <div class="card">
+  <small>Join a room</small>
+  <input id="codeIn" class="code" type="tel" inputmode="numeric" maxlength="4" placeholder="0000">
+  <button id="joinBtn" class="sec">Join</button>
+  <p class="err" id="homeErr"></p>
+ </div>
+ <small>Have a direct video link or file instead? <a href="/">Use the synced player</a>.</small>
+</section>
+
+<section id="room" class="hide">
+ <div class="card">
+  <div class="row"><span class="pill" id="roleP"></span><span class="pill" id="peerP"></span></div>
+  <div class="big" id="codeBig"></div>
+  <small id="hint"></small>
+ </div>
+ <div class="card hide" id="startCard">
+  <input id="pinIn" type="password" placeholder="Host PIN" class="hide" style="margin-bottom:10px">
+  <button id="startBtn">Start browser</button>
+  <p class="err" id="startErr"></p>
+ </div>
+ <div class="stage" id="stage"><div class="msg" id="stageMsg">Waiting for the host to start the browser…</div></div>
+ <button class="sec" id="leave" style="margin-top:12px">Leave room</button>
+</section>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const sb=supabase.createClient('https://fhbqxujlnqlmzvulrdxt.supabase.co','sb_publishable_adcZmpDjIVXM1qB5UYS-Dg_iZeGh2uT');
+const $=id=>document.getElementById(id);
+let ch=null,role=null,hb=null,sess=null,shownUrl=null;
+function show(id){['home','room'].forEach(x=>$(x).classList.toggle('hide',x!==id))}
+function peers(){const st=ch.presenceState();let h=0,v=0;Object.keys(st).forEach(k=>k.startsWith('host')?h++:v++);return{h,v}}
+function presence(){
+  const{h,v}=peers();
+  if(role==='host'){$('peerP').textContent=v?v+' watching':'nobody yet';$('peerP').classList.toggle('on',v>0)}
+  else{$('peerP').textContent=h?'host connected':'host offline';$('peerP').classList.toggle('on',h>0)}
+}
+function render(url){
+  if(url===shownUrl)return;shownUrl=url;
+  const stage=$('stage');stage.innerHTML='';
+  if(!url){stage.innerHTML='<div class="msg">Waiting for the host to start the browser…</div>';return}
+  const f=document.createElement('iframe');f.src=url;f.allow='autoplay; fullscreen; clipboard-read; clipboard-write';f.setAttribute('allowfullscreen','');
+  stage.appendChild(f);
+  if(role!=='host'){const s=document.createElement('div');s.className='shield';stage.appendChild(s)}
+}
+function send(){if(role==='host'&&ch)ch.send({type:'broadcast',event:'state',payload:{url:sess?sess.url:null}})}
+async function open(r,c){
+  role=r;show('room');
+  $('roleP').textContent=r==='host'?'HOST':'VIEWER';$('roleP').classList.toggle('on',r==='host');
+  $('codeBig').textContent=c;
+  $('startCard').classList.toggle('hide',r!=='host');
+  $('hint').textContent=r==='host'?'Tell your friend to open this page and enter the code.':'The host controls the browser. You just watch.';
+  ch=sb.channel('room-b-'+c,{config:{broadcast:{self:false},presence:{key:r+'-'+Math.random().toString(36).slice(2,7)}}});
+  ch.on('broadcast',{event:'state'},({payload})=>{if(role==='viewer')render(payload.url)});
+  ch.on('broadcast',{event:'hello'},()=>send());
+  ch.on('presence',{event:'sync'},presence);
+  await new Promise((res,rej)=>ch.subscribe(s=>{if(s==='SUBSCRIBED')res();if(s==='CHANNEL_ERROR'||s==='TIMED_OUT')rej(new Error('x'))}));
+  await ch.track({role:r});
+  if(r==='host')hb=setInterval(send,3000);else ch.send({type:'broadcast',event:'hello',payload:{}});
+}
+$('startBtn').onclick=async()=>{
+  $('startBtn').disabled=true;$('startErr').textContent='';
+  try{
+    const r=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin:$('pinIn').value})});
+    const d=await r.json();
+    if(r.status===401){$('pinIn').classList.remove('hide');$('startErr').textContent='Enter the host PIN.';return}
+    if(!r.ok)throw new Error(d.error||'failed');
+    sess=d;render(d.url);send();$('startCard').classList.add('hide');
+  }catch(e){$('startErr').textContent=String(e.message||e)}
+  finally{$('startBtn').disabled=false}
+};
+async function leave(){
+  if(hb){clearInterval(hb);hb=null}
+  if(role==='host'&&sess){fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({release:true,id:sess.id,pin:$('pinIn').value})}).catch(()=>{})}
+  if(ch){await sb.removeChannel(ch);ch=null}
+  sess=null;shownUrl=null;render(null);show('home');
+}
+$('leave').onclick=leave;
+$('hostBtn').onclick=async()=>{
+  $('hostBtn').disabled=true;
+  try{
+    for(let i=0;i<8;i++){
+      const c=String(Math.floor(1000+Math.random()*9000));
+      const p=sb.channel('room-b-'+c,{config:{presence:{key:'probe-'+Math.random()}}});
+      const taken=await new Promise(res=>{
+        p.on('presence',{event:'sync'},()=>res(Object.keys(p.presenceState()).some(k=>k.startsWith('host'))));
+        p.subscribe(s=>{if(s==='SUBSCRIBED')setTimeout(()=>res(Object.keys(p.presenceState()).some(k=>k.startsWith('host'))),600);if(s==='CHANNEL_ERROR')res(true)});
+      });
+      await sb.removeChannel(p);
+      if(!taken){await open('host',c);return}
+    }
+    $('homeErr').textContent='No free code, try again.';
+  }catch(e){$('homeErr').textContent='Connection problem, try again.'}
+  finally{$('hostBtn').disabled=false}
+};
+$('joinBtn').onclick=async()=>{
+  const c=$('codeIn').value.trim();
+  if(!/^\d{4}$/.test(c)){$('homeErr').textContent='Enter the 4-digit code.';return}
+  $('homeErr').textContent='';$('joinBtn').disabled=true;
+  try{await open('viewer',c);setTimeout(()=>{if(role==='viewer'&&!peers().h)$('stageMsg')&&($('stageMsg').textContent='No host in this room yet…')},1500)}
+  catch(e){$('homeErr').textContent='Could not join, try again.'}
+  finally{$('joinBtn').disabled=false}
+};
+$('codeIn').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'').slice(0,4)});
+</script>
+</body>
+</html>
