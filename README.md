@@ -1,28 +1,22 @@
 # Watch Together
 
-Watch together on two devices with a 4-digit room code. No install, no account. Runs on Vercel.
+Watch together on two devices with a 4-digit room code. No install, no account, no API keys. Runs on Vercel.
 
 ## Two modes
 
-**`/` — cloud browser (host drives, viewer watches)**
-The host taps *Start browser*: a Browserbase cloud Chrome (ad blocker on) opens in the page. The host controls it directly. The viewer sees the same live browser with a shield over it, so they cannot click anything.
+**`/` — browser**
+The host shares a link. It opens in a real `<iframe>` on the host's and every viewer's device, and the viewer's copy is shielded so only the host can click. No backend, no signup.
 
 **`/player` — synced player**
 The host loads a direct `.mp4` / `.m3u8` link or a local file. Play, pause, seek and rewind/forward 10s sync to the viewer, with drift correction every 2s.
 
 Use only sources you have the rights to watch.
 
-## Setup (Vercel env vars)
-
-| Name | What |
-|---|---|
-| `BROWSERBASE_API_KEY` | from browserbase.com |
-| `BROWSERBASE_PROJECT_ID` | from browserbase.com |
-| `HOST_PIN` | optional; if set, hosts must enter it (protects your Browserbase credits) |
-
-Room codes and sync go over Supabase Realtime (broadcast + presence): no tables needed. The Supabase URL and publishable key in the pages are safe to expose.
-
 ## Known limits
 
-- Browserbase's live view streams video; sound may not come through. If it doesn't, movie audio won't play at `/`, and the synced player at `/player` is the option with sound.
-- Browserbase sessions are billed per minute; leaving the room releases the session.
+- **Some sites block embedding.** Sites that send `X-Frame-Options` or a `Content-Security-Policy: frame-ancestors` header refuse to load inside an iframe and will stay blank. There's no way around this without a real backend browser (which needs a paid API key, e.g. Browserbase) — try a different link, or use `/player` if you have a direct video URL.
+- **Only the host's typed URL syncs.** Since each device loads its own iframe of the real site, the viewer can't see clicks or in-page navigation the host makes *inside* that site — only the link the host explicitly enters and hits Go on.
+
+## Setup
+
+None — no environment variables, no API keys. Room codes and sync go over Supabase Realtime (broadcast + presence): no tables needed. The Supabase URL and publishable key in the pages are safe to expose.
