@@ -55,7 +55,7 @@ a{color:var(--acc)}
  <div class="card hide" id="urlCard">
   <div class="row"><input id="urlIn" type="url" placeholder="Paste a website link" autocapitalize="off" autocorrect="off"><button class="fit" id="goBtn" style="width:auto">Go</button></div>
   <p class="err" id="navErr"></p>
-  <small>Some sites refuse to be embedded and will stay blank — try another link if that happens.</small>
+  <small>Links load through an ad-stripping proxy. Most sites work, but some heavy JS sites or logins may not — try another link if a page looks broken.</small>
  </div>
 
  <div class="stage" id="stage"><div class="msg" id="stageMsg">Waiting for the host to open a site…</div></div>
@@ -81,7 +81,7 @@ function render(url){
   if(url===shownUrl)return;shownUrl=url;
   const stage=$('stage');stage.innerHTML='';
   if(!url){stage.innerHTML='<div class="msg">'+(role==='host'?'Paste a link above and hit Go.':'Waiting for the host to open a site…')+'</div>';return}
-  const f=document.createElement('iframe');f.src=url;f.allow='autoplay; fullscreen; encrypted-media; picture-in-picture';f.setAttribute('allowfullscreen','');f.referrerPolicy='no-referrer-when-downgrade';
+  const f=document.createElement('iframe');f.src='/api/proxy?url='+encodeURIComponent(url);f.allow='autoplay; fullscreen; encrypted-media; picture-in-picture';f.setAttribute('allowfullscreen','');f.setAttribute('sandbox','allow-scripts allow-same-origin allow-forms allow-presentation');f.referrerPolicy='no-referrer-when-downgrade';
   stage.appendChild(f);
   if(role!=='host'){const s=document.createElement('div');s.className='shield';stage.appendChild(s)}
 }
