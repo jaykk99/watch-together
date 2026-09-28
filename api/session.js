@@ -1,5 +1,5 @@
 // Vercel serverless function: starts / releases a Browserbase cloud browser (ad blocker on).
-// Env vars (Vercel project settings): BROWSERBASE_API_KEY, BROWSERBASE_PROJECT_ID, optional HOST_PIN.
+// Env vars: BROWSERBASE_API_KEY, BROWSERBASE_PROJECT_ID, optional HOST_PIN.
 const API = 'https://api.browserbase.com/v1';
 
 export default async function handler(req, res) {
@@ -29,6 +29,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         projectId: project,
         timeout: 7200,
+        keepAlive: true,
         browserSettings: { blockAds: true, viewport: { width: 1280, height: 720 } }
       })
     });
@@ -42,6 +43,6 @@ export default async function handler(req, res) {
     if (!url) return res.status(502).json({ error: 'No live view URL returned' });
     return res.status(200).json({ id: s.id, url });
   } catch (e) {
-    return res.status(500).json({ error: String(e && e.message || e) });
+    return res.status(500).json({ error: String((e && e.message) || e) });
   }
 }

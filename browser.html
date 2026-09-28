@@ -11,12 +11,12 @@
 body{padding:env(safe-area-inset-top) 12px env(safe-area-inset-bottom)}
 .wrap{max-width:900px;margin:0 auto;padding:16px 0}
 h1{font-size:24px;margin:6px 0 4px}p.sub{color:var(--mut);margin:0 0 20px}
-.card{background:var(--card);border-radius:16px;padding:16px;margin-bottom:12px}
-button{font:inherit;border:0;border-radius:12px;padding:14px 18px;background:var(--acc);color:#fff;font-weight:600;width:100%}
-button.sec{background:#26263a}button:disabled{opacity:.5}
-input{width:100%;font:inherit;padding:14px;border-radius:12px;border:1px solid #2b2b42;background:#0f0f1a;color:var(--fg)}
+.card{background:var(--card);border-radius:16px;padding:14px;margin-bottom:12px}
+button{font:inherit;border:0;border-radius:12px;padding:13px 14px;background:var(--acc);color:#fff;font-weight:600;width:100%}
+button.sec{background:#26263a}button.on{background:var(--acc)}button:disabled{opacity:.5}
+input[type=text],input[type=tel],input[type=url],input[type=password]{width:100%;font:inherit;padding:13px;border-radius:12px;border:1px solid #2b2b42;background:#0f0f1a;color:var(--fg)}
 input.code{font-size:32px;text-align:center;letter-spacing:.4em;margin:10px 0}
-.row{display:flex;gap:10px;align-items:center}.row>*{flex:1}
+.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}.row>.fit{flex:0 0 auto}
 .hide{display:none!important}
 .big{font-size:40px;font-weight:800;letter-spacing:.25em;text-align:center;margin:4px 0}
 .pill{display:inline-block;padding:4px 10px;border-radius:99px;font-size:13px;background:#26263a;color:var(--mut);text-align:center}
@@ -27,6 +27,8 @@ input.code{font-size:32px;text-align:center;letter-spacing:.4em;margin:10px 0}
 .msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;color:var(--mut)}
 small{color:var(--mut)}.err{color:var(--bad);min-height:1em;margin:8px 0 0}
 a{color:var(--acc)}
+input[type=range]{width:100%}
+.vol{display:flex;align-items:center;gap:10px;margin-top:10px}
 </style>
 </head>
 <body>
@@ -51,12 +53,27 @@ a{color:var(--acc)}
   <div class="big" id="codeBig"></div>
   <small id="hint"></small>
  </div>
+
  <div class="card hide" id="startCard">
   <input id="pinIn" type="password" placeholder="Host PIN" class="hide" style="margin-bottom:10px">
   <button id="startBtn">Start browser</button>
   <p class="err" id="startErr"></p>
  </div>
+
+ <div class="card hide" id="urlCard">
+  <div class="row"><input id="urlIn" type="url" placeholder="Paste a website link" autocapitalize="off" autocorrect="off"><button class="fit" id="goBtn" style="width:auto">Go</button></div>
+  <div class="row" style="margin-top:10px"><button id="modeBrowse" class="on">🖱 Browse</button><button id="modeVideo" class="sec">🎬 Video</button></div>
+  <p class="err" id="navErr"></p>
+ </div>
+
  <div class="stage" id="stage"><div class="msg" id="stageMsg">Waiting for the host to start the browser…</div></div>
+
+ <div class="card hide" id="videoCard" style="margin-top:12px">
+  <div class="row"><button class="sec" id="vBack">⏪ 10s</button><button id="vPlay">⏯ Play / Pause</button><button class="sec" id="vFwd">10s ⏩</button></div>
+  <div class="vol"><span>🔈</span><input type="range" id="vVol" min="0" max="100" value="100"><span id="volN">100</span></div>
+  <small id="vStat" style="display:block;margin-top:8px">Find the movie in Browse mode, start it, then switch to Video mode.</small>
+ </div>
+
  <button class="sec" id="leave" style="margin-top:12px">Leave room</button>
 </section>
 
@@ -66,7 +83,7 @@ a{color:var(--acc)}
 <script>
 const sb=supabase.createClient('https://fhbqxujlnqlmzvulrdxt.supabase.co','sb_publishable_adcZmpDjIVXM1qB5UYS-Dg_iZeGh2uT');
 const $=id=>document.getElementById(id);
-let ch=null,role=null,hb=null,sess=null,shownUrl=null;
+let ch=null,role=null,hb=null,sess=null,shownUrl=null,mode='browse',busy=false;
 function show(id){['home','room'].forEach(x=>$(x).classList.toggle('hide',x!==id))}
 function peers(){const st=ch.presenceState();let h=0,v=0;Object.keys(st).forEach(k=>k.startsWith('host')?h++:v++);return{h,v}}
 function presence(){
@@ -80,7 +97,13 @@ function render(url){
   if(!url){stage.innerHTML='<div class="msg">Waiting for the host to start the browser…</div>';return}
   const f=document.createElement('iframe');f.src=url;f.allow='autoplay; fullscreen; clipboard-read; clipboard-write';f.setAttribute('allowfullscreen','');
   stage.appendChild(f);
-  if(role!=='host'){const s=document.createElement('div');s.className='shield';stage.appendChild(s)}
+  const s=document.createElement('div');s.id='shield';s.className='shield'+((role==='host'&&mode==='browse')?' hide':'');stage.appendChild(s);
+}
+function applyMode(){
+  $('modeBrowse').className=mode==='browse'?'on':'sec';
+  $('modeVideo').className=mode==='video'?'on':'sec';
+  $('videoCard').classList.toggle('hide',!(role==='host'&&mode==='video'&&sess));
+  const sh=$('shield');if(sh)sh.classList.toggle('hide',role==='host'&&mode==='browse');
 }
 function send(){if(role==='host'&&ch)ch.send({type:'broadcast',event:'state',payload:{url:sess?sess.url:null}})}
 async function open(r,c){
@@ -97,22 +120,59 @@ async function open(r,c){
   await ch.track({role:r});
   if(r==='host')hb=setInterval(send,3000);else ch.send({type:'broadcast',event:'hello',payload:{}});
 }
+async function api(path,payload){
+  const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,pin:$('pinIn').value})});
+  const d=await r.json().catch(()=>({}));
+  return{status:r.status,ok:r.ok,d};
+}
 $('startBtn').onclick=async()=>{
   $('startBtn').disabled=true;$('startErr').textContent='';
   try{
-    const r=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin:$('pinIn').value})});
-    const d=await r.json();
-    if(r.status===401){$('pinIn').classList.remove('hide');$('startErr').textContent='Enter the host PIN.';return}
-    if(!r.ok)throw new Error(d.error||'failed');
-    sess=d;render(d.url);send();$('startCard').classList.add('hide');
+    const{status,ok,d}=await api('/api/session',{});
+    if(status===401){$('pinIn').classList.remove('hide');$('startErr').textContent='Enter the host PIN.';return}
+    if(!ok)throw new Error(d.error||'failed');
+    sess=d;mode='browse';render(d.url);send();
+    $('startCard').classList.add('hide');$('urlCard').classList.remove('hide');applyMode();
   }catch(e){$('startErr').textContent=String(e.message||e)}
   finally{$('startBtn').disabled=false}
 };
+$('goBtn').onclick=async()=>{
+  const u=$('urlIn').value.trim();if(!u||!sess)return;
+  $('goBtn').disabled=true;$('navErr').textContent='';
+  try{
+    const{ok,d}=await api('/api/control',{id:sess.id,action:'goto',url:u});
+    if(!ok)throw new Error(d.error||'failed');
+    $('urlIn').value=d.url||u;
+  }catch(e){$('navErr').textContent=String(e.message||e)}
+  finally{$('goBtn').disabled=false}
+};
+$('urlIn').addEventListener('keydown',e=>{if(e.key==='Enter')$('goBtn').click()});
+$('modeBrowse').onclick=()=>{mode='browse';applyMode()};
+$('modeVideo').onclick=()=>{mode='video';applyMode()};
+
+async function vid(cmd,value){
+  if(!sess||busy)return;busy=true;
+  try{
+    const{ok,d}=await api('/api/control',{id:sess.id,action:'video',cmd,value});
+    if(ok&&d.ok){const s=d.state;$('vStat').textContent=(s.paused?'Paused':'Playing')+' — '+fmt(s.t)+' / '+fmt(s.d);$('vVol').value=Math.round(s.vol*100);$('volN').textContent=Math.round(s.vol*100)}
+    else $('vStat').textContent=(d&&d.error)||'Could not control the video.';
+  }catch(e){$('vStat').textContent='Control failed, try again.'}
+  finally{busy=false}
+}
+function fmt(s){s=Math.max(0,s||0);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=Math.floor(s%60);return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0')}
+$('vPlay').onclick=()=>vid('toggle');
+$('vBack').onclick=()=>vid('seek',-10);
+$('vFwd').onclick=()=>vid('seek',10);
+$('vVol').oninput=e=>{$('volN').textContent=e.target.value};
+$('vVol').onchange=e=>vid('volume',e.target.value/100);
+
 async function leave(){
   if(hb){clearInterval(hb);hb=null}
-  if(role==='host'&&sess){fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({release:true,id:sess.id,pin:$('pinIn').value})}).catch(()=>{})}
+  if(role==='host'&&sess){api('/api/session',{release:true,id:sess.id}).catch(()=>{})}
   if(ch){await sb.removeChannel(ch);ch=null}
-  sess=null;shownUrl=null;render(null);show('home');
+  sess=null;shownUrl=null;render(null);
+  $('urlCard').classList.add('hide');$('videoCard').classList.add('hide');
+  show('home');
 }
 $('leave').onclick=leave;
 $('hostBtn').onclick=async()=>{
@@ -136,7 +196,7 @@ $('joinBtn').onclick=async()=>{
   const c=$('codeIn').value.trim();
   if(!/^\d{4}$/.test(c)){$('homeErr').textContent='Enter the 4-digit code.';return}
   $('homeErr').textContent='';$('joinBtn').disabled=true;
-  try{await open('viewer',c);setTimeout(()=>{if(role==='viewer'&&!peers().h)$('stageMsg')&&($('stageMsg').textContent='No host in this room yet…')},1500)}
+  try{await open('viewer',c);setTimeout(()=>{if(role==='viewer'&&!peers().h&&$('stageMsg'))$('stageMsg').textContent='No host in this room yet…'},1500)}
   catch(e){$('homeErr').textContent='Could not join, try again.'}
   finally{$('joinBtn').disabled=false}
 };

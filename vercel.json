@@ -1,3 +1,7 @@
 {
-  "cleanUrls": true
+  "cleanUrls": true,
+  "functions": {
+    "api/control.js": { "maxDuration": 30 },
+    "api/session.js": { "maxDuration": 20 }
+  }
 }
