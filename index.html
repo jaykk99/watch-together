@@ -22,6 +22,7 @@ input.code{font-size:32px;text-align:center;letter-spacing:.4em;margin:10px 0}
 .pill{display:inline-block;padding:4px 10px;border-radius:99px;font-size:13px;background:#26263a;color:var(--mut);text-align:center}
 .pill.on{background:#12351f;color:var(--ok)}
 .stage{position:relative;background:#000;border-radius:14px;overflow:hidden;aspect-ratio:16/9;width:100%}
+.stage:fullscreen,.stage:-webkit-full-screen{aspect-ratio:auto;width:100vw;height:100vh;border-radius:0}
 .stage iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .shield{position:absolute;inset:0;z-index:5}
 .msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;color:var(--mut)}
@@ -60,6 +61,7 @@ a{color:var(--acc)}
 
  <div class="stage" id="stage"><div class="msg" id="stageMsg">Waiting for the host to open a site…</div></div>
 
+ <button class="sec" id="fsBtn" style="margin-top:10px">⛶ Fullscreen</button>
  <button class="sec" id="leave" style="margin-top:12px">Leave room</button>
 </section>
 
@@ -142,6 +144,18 @@ $('joinBtn').onclick=async()=>{
   finally{$('joinBtn').disabled=false}
 };
 $('codeIn').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'').slice(0,4)});
+
+const stageEl=$('stage');
+function isFs(){return document.fullscreenElement||document.webkitFullscreenElement}
+$('fsBtn').onclick=async()=>{
+  if(!isFs()){
+    try{await (stageEl.requestFullscreen?stageEl.requestFullscreen():stageEl.webkitRequestFullscreen())}catch(e){return}
+    if(screen.orientation&&screen.orientation.lock)screen.orientation.lock('landscape').catch(()=>{});
+  }else{
+    if(screen.orientation&&screen.orientation.unlock)try{screen.orientation.unlock()}catch(e){}
+    document.exitFullscreen?document.exitFullscreen():document.webkitExitFullscreen&&document.webkitExitFullscreen();
+  }
+};
 </script>
 </body>
 </html>
