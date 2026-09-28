@@ -22,6 +22,8 @@ input.code{font-size:32px;text-align:center;letter-spacing:.4em}
 .pill{display:inline-block;padding:4px 10px;border-radius:99px;font-size:13px;background:#26263a;color:var(--mut)}
 .pill.on{background:#12351f;color:var(--ok)}
 .stage{position:relative;background:#000;border-radius:16px;overflow:hidden}
+.stage:fullscreen,.stage:-webkit-full-screen{border-radius:0;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center}
+.stage:fullscreen video,.stage:-webkit-full-screen video{max-height:100vh;height:100%;width:100%;object-fit:contain}
 video{width:100%;max-height:60vh;display:block;background:#000}
 video.locked{pointer-events:none}
 .msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;background:rgba(0,0,0,.65);color:var(--fg)}
@@ -64,10 +66,11 @@ small{color:var(--mut)}label.file{display:block;text-align:center;padding:14px;b
   <small style="display:block;margin-top:8px">With a file, the viewer picks the same file on their phone; playback still syncs.</small>
  </div>
 
- <div class="stage">
+ <div class="stage" id="stage">
   <video id="v" playsinline preload="auto"></video>
   <div class="msg" id="stageMsg">Waiting for the host to pick a video…</div>
  </div>
+ <button class="sec" id="fsBtn" style="margin-top:10px">⛶ Fullscreen</button>
 
  <div id="hostCtl" class="hide">
   <input type="range" id="seek" min="0" max="1000" value="0">
@@ -239,6 +242,19 @@ $('joinBtn').onclick=async()=>{
   finally{$('joinBtn').disabled=false}
 };
 $('codeIn').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'').slice(0,4)});
+
+const stageEl=$('stage');
+function isFs(){return document.fullscreenElement||document.webkitFullscreenElement}
+$('fsBtn').onclick=async()=>{
+  if(!isFs()){
+    if(v.webkitEnterFullscreen){try{v.webkitEnterFullscreen();return}catch(e){}}
+    try{await (stageEl.requestFullscreen?stageEl.requestFullscreen():stageEl.webkitRequestFullscreen())}catch(e){return}
+    if(screen.orientation&&screen.orientation.lock)screen.orientation.lock('landscape').catch(()=>{});
+  }else{
+    if(screen.orientation&&screen.orientation.unlock)try{screen.orientation.unlock()}catch(e){}
+    document.exitFullscreen?document.exitFullscreen():document.webkitExitFullscreen&&document.webkitExitFullscreen();
+  }
+};
 </script>
 </body>
 </html>
