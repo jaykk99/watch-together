@@ -4,237 +4,200 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b0b12">
-<title>Watch Together</title>
+<title>Watch Together — Browser</title>
 <style>
 :root{--bg:#0b0b12;--card:#171725;--fg:#f2f2f7;--mut:#8b8ba3;--acc:#7c5cff;--ok:#2ecc71;--bad:#ff5c7a}
 *{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-body{padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom)}
-.wrap{max-width:720px;margin:0 auto;padding:20px 0}
-h1{font-size:26px;margin:8px 0 4px}p.sub{color:var(--mut);margin:0 0 24px}
-.card{background:var(--card);border-radius:16px;padding:18px;margin-bottom:14px}
-button{font:inherit;border:0;border-radius:12px;padding:14px 18px;background:var(--acc);color:#fff;font-weight:600;width:100%}
-button.sec{background:#26263a}button:disabled{opacity:.5}
-input[type=text],input[type=tel],input[type=url]{width:100%;font:inherit;padding:14px;border-radius:12px;border:1px solid #2b2b42;background:#0f0f1a;color:var(--fg)}
-input.code{font-size:32px;text-align:center;letter-spacing:.4em}
-.row{display:flex;gap:10px}.row>*{flex:1}
+body{padding:env(safe-area-inset-top) 12px env(safe-area-inset-bottom)}
+.wrap{max-width:900px;margin:0 auto;padding:16px 0}
+h1{font-size:24px;margin:6px 0 4px}p.sub{color:var(--mut);margin:0 0 20px}
+.card{background:var(--card);border-radius:16px;padding:14px;margin-bottom:12px}
+button{font:inherit;border:0;border-radius:12px;padding:13px 14px;background:var(--acc);color:#fff;font-weight:600;width:100%}
+button.sec{background:#26263a}button.on{background:var(--acc)}button:disabled{opacity:.5}
+input[type=text],input[type=tel],input[type=url],input[type=password]{width:100%;font:inherit;padding:13px;border-radius:12px;border:1px solid #2b2b42;background:#0f0f1a;color:var(--fg)}
+input.code{font-size:32px;text-align:center;letter-spacing:.4em;margin:10px 0}
+.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}.row>.fit{flex:0 0 auto}
 .hide{display:none!important}
-.big{font-size:44px;font-weight:800;letter-spacing:.25em;text-align:center;margin:6px 0}
-.pill{display:inline-block;padding:4px 10px;border-radius:99px;font-size:13px;background:#26263a;color:var(--mut)}
+.big{font-size:40px;font-weight:800;letter-spacing:.25em;text-align:center;margin:4px 0}
+.pill{display:inline-block;padding:4px 10px;border-radius:99px;font-size:13px;background:#26263a;color:var(--mut);text-align:center}
 .pill.on{background:#12351f;color:var(--ok)}
-.stage{position:relative;background:#000;border-radius:16px;overflow:hidden}
-video{width:100%;max-height:60vh;display:block;background:#000}
-video.locked{pointer-events:none}
-.msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;background:rgba(0,0,0,.65);color:var(--fg)}
-.ctrl{display:flex;gap:8px;margin-top:12px}.ctrl button{padding:12px 6px;font-size:15px}
-input[type=range]{width:100%;margin:12px 0 0}
-.time{display:flex;justify-content:space-between;color:var(--mut);font-size:13px}
-small{color:var(--mut)}label.file{display:block;text-align:center;padding:14px;border-radius:12px;background:#26263a;font-weight:600}
-.err{color:var(--bad);margin:8px 0 0;min-height:1em}
+.stage{position:relative;background:#000;border-radius:14px;overflow:hidden;aspect-ratio:16/9;width:100%}
+.stage iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.shield{position:absolute;inset:0;z-index:5}
+.msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;color:var(--mut)}
+small{color:var(--mut)}.err{color:var(--bad);min-height:1em;margin:8px 0 0}
+a{color:var(--acc)}
+input[type=range]{width:100%}
+.vol{display:flex;align-items:center;gap:10px;margin-top:10px}
 </style>
 </head>
 <body>
 <div class="wrap">
 
 <section id="home">
- <h1>🎬 Watch Together</h1>
- <p class="sub">The host controls the movie. Everyone else stays in sync.</p>
- <div class="card">
-  <button id="hostBtn">Host a room</button>
- </div>
+ <h1>🌐 Watch Together Browser</h1>
+ <p class="sub">The host drives a cloud browser (ads blocked). Everyone in the room sees it live.</p>
+ <div class="card"><button id="hostBtn">Host a room</button></div>
  <div class="card">
   <small>Join a room</small>
-  <input id="codeIn" class="code" type="tel" inputmode="numeric" maxlength="4" placeholder="0000" style="margin:10px 0">
+  <input id="codeIn" class="code" type="tel" inputmode="numeric" maxlength="4" placeholder="0000">
   <button id="joinBtn" class="sec">Join</button>
   <p class="err" id="homeErr"></p>
  </div>
+ <small>Have a direct video link or file instead? <a href="/player">Use the synced player</a>.</small>
 </section>
 
 <section id="room" class="hide">
  <div class="card">
-  <div class="row" style="align-items:center"><span class="pill" id="roleP"></span><span class="pill" id="peerP" style="text-align:center"></span></div>
+  <div class="row"><span class="pill" id="roleP"></span><span class="pill" id="peerP"></span></div>
   <div class="big" id="codeBig"></div>
   <small id="hint"></small>
  </div>
 
- <div class="card hide" id="hostSrc">
-  <small>Video link (direct .mp4 or .m3u8) — use a source you have the rights to watch</small>
-  <input id="urlIn" type="url" placeholder="https://.../movie.mp4" style="margin:10px 0">
-  <div class="row"><button id="loadUrl">Load link</button><label class="file">Pick a file<input id="fileIn" type="file" accept="video/*" hidden></label></div>
-  <small style="display:block;margin-top:8px">With a file, the viewer picks the same file on their phone; playback still syncs.</small>
+ <div class="card hide" id="startCard">
+  <input id="pinIn" type="password" placeholder="Host PIN" class="hide" style="margin-bottom:10px">
+  <button id="startBtn">Start browser</button>
+  <p class="err" id="startErr"></p>
  </div>
 
- <div class="stage">
-  <video id="v" playsinline preload="auto"></video>
-  <div class="msg" id="stageMsg">Waiting for the host to pick a video…</div>
+ <div class="card hide" id="urlCard">
+  <div class="row"><input id="urlIn" type="url" placeholder="Paste a website link" autocapitalize="off" autocorrect="off"><button class="fit" id="goBtn" style="width:auto">Go</button></div>
+  <div class="row" style="margin-top:10px"><button id="modeBrowse" class="on">🖱 Browse</button><button id="modeVideo" class="sec">🎬 Video</button></div>
+  <p class="err" id="navErr"></p>
  </div>
 
- <div id="hostCtl" class="hide">
-  <input type="range" id="seek" min="0" max="1000" value="0">
-  <div class="time"><span id="tCur">0:00</span><span id="tDur">0:00</span></div>
-  <div class="ctrl">
-   <button class="sec" id="b10">⏪ 10s</button>
-   <button id="bPlay">▶ Play</button>
-   <button class="sec" id="f10">10s ⏩</button>
-  </div>
+ <div class="stage" id="stage"><div class="msg" id="stageMsg">Waiting for the host to start the browser…</div></div>
+
+ <div class="card hide" id="videoCard" style="margin-top:12px">
+  <div class="row"><button class="sec" id="vBack">⏪ 10s</button><button id="vPlay">⏯ Play / Pause</button><button class="sec" id="vFwd">10s ⏩</button></div>
+  <div class="vol"><span>🔈</span><input type="range" id="vVol" min="0" max="100" value="100"><span id="volN">100</span></div>
+  <small id="vStat" style="display:block;margin-top:8px">Find the movie in Browse mode, start it, then switch to Video mode.</small>
  </div>
 
- <div id="viewerCtl" class="hide card" style="margin-top:12px">
-  <div id="viewerFile" class="hide">
-   <small>The host is using a local file. Pick the same file:</small>
-   <label class="file" style="margin-top:8px">Pick the same file<input id="vFileIn" type="file" accept="video/*" hidden></label>
-  </div>
-  <button id="tapPlay" class="hide">Tap to start playback</button>
-  <small id="vStat">Synced to host.</small>
- </div>
-
- <button class="sec" id="leave" style="margin-top:14px">Leave room</button>
+ <button class="sec" id="leave" style="margin-top:12px">Leave room</button>
 </section>
 
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
 <script>
-const SB_URL='https://fhbqxujlnqlmzvulrdxt.supabase.co';
-const SB_KEY='sb_publishable_adcZmpDjIVXM1qB5UYS-Dg_iZeGh2uT';
-const sb=supabase.createClient(SB_URL,SB_KEY,{realtime:{params:{eventsPerSecond:20}}});
+const sb=supabase.createClient('https://fhbqxujlnqlmzvulrdxt.supabase.co','sb_publishable_adcZmpDjIVXM1qB5UYS-Dg_iZeGh2uT');
 const $=id=>document.getElementById(id);
-const v=$('v');
-let ch=null,role=null,code=null,hls=null,hb=null,curSrc=null,localName=null,applying=false,hostSeen=false,userActive=false;
-const pad=n=>String(Math.floor(n)).padStart(2,'0');
-const fmt=s=>{s=Math.max(0,s||0);const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return (h?h+':'+pad(m):m)+':'+pad(s%60)};
-
+let ch=null,role=null,hb=null,sess=null,shownUrl=null,mode='browse',busy=false;
 function show(id){['home','room'].forEach(x=>$(x).classList.toggle('hide',x!==id))}
-
-function setSource(src){
-  if(hls){hls.destroy();hls=null}
-  curSrc=src;
-  if(/\.m3u8(\?|$)/i.test(src)&&window.Hls&&Hls.isSupported()){hls=new Hls();hls.loadSource(src);hls.attachMedia(v)}
-  else{v.src=src}
-  $('stageMsg').classList.add('hide');
+function peers(){const st=ch.presenceState();let h=0,v=0;Object.keys(st).forEach(k=>k.startsWith('host')?h++:v++);return{h,v}}
+function presence(){
+  const{h,v}=peers();
+  if(role==='host'){$('peerP').textContent=v?v+' watching':'nobody yet';$('peerP').classList.toggle('on',v>0)}
+  else{$('peerP').textContent=h?'host connected':'host offline';$('peerP').classList.toggle('on',h>0)}
 }
-
+function render(url){
+  if(url===shownUrl)return;shownUrl=url;
+  const stage=$('stage');stage.innerHTML='';
+  if(!url){stage.innerHTML='<div class="msg">Waiting for the host to start the browser…</div>';return}
+  const f=document.createElement('iframe');f.src=url;f.allow='autoplay; fullscreen; clipboard-read; clipboard-write';f.setAttribute('allowfullscreen','');
+  stage.appendChild(f);
+  const s=document.createElement('div');s.id='shield';s.className='shield'+((role==='host'&&mode==='browse')?' hide':'');stage.appendChild(s);
+}
+function applyMode(){
+  $('modeBrowse').className=mode==='browse'?'on':'sec';
+  $('modeVideo').className=mode==='video'?'on':'sec';
+  $('videoCard').classList.toggle('hide',!(role==='host'&&mode==='video'&&sess));
+  const sh=$('shield');if(sh)sh.classList.toggle('hide',role==='host'&&mode==='browse');
+}
+function send(){if(role==='host'&&ch)ch.send({type:'broadcast',event:'state',payload:{url:sess?sess.url:null}})}
 async function open(r,c){
-  role=r;code=c;
-  show('room');
-  $('roleP').textContent=r==='host'?'HOST':'VIEWER';
-  $('roleP').classList.toggle('on',r==='host');
+  role=r;show('room');
+  $('roleP').textContent=r==='host'?'HOST':'VIEWER';$('roleP').classList.toggle('on',r==='host');
   $('codeBig').textContent=c;
-  $('hostSrc').classList.toggle('hide',r!=='host');
-  $('hostCtl').classList.toggle('hide',r!=='host');
-  $('viewerCtl').classList.toggle('hide',r==='host');
-  v.controls=false;v.classList.toggle('locked',r!=='host');
-  $('hint').textContent=r==='host'?'Tell your friend to open this page and enter this code.':'The host controls playback. You just watch.';
-  ch=sb.channel('room-'+c,{config:{broadcast:{self:false},presence:{key:r+'-'+Math.random().toString(36).slice(2,7)}}});
-  ch.on('broadcast',{event:'state'},({payload})=>onState(payload));
-  ch.on('broadcast',{event:'hello'},()=>{if(role==='host')sendState()});
-  ch.on('presence',{event:'sync'},updatePresence);
-  await new Promise((res,rej)=>ch.subscribe(s=>{if(s==='SUBSCRIBED')res();if(s==='CHANNEL_ERROR'||s==='TIMED_OUT')rej(new Error('connect'))}));
+  $('startCard').classList.toggle('hide',r!=='host');
+  $('hint').textContent=r==='host'?'Tell your friend to open this page and enter the code.':'The host controls the browser. You just watch.';
+  ch=sb.channel('room-b-'+c,{config:{broadcast:{self:false},presence:{key:r+'-'+Math.random().toString(36).slice(2,7)}}});
+  ch.on('broadcast',{event:'state'},({payload})=>{if(role==='viewer')render(payload.url)});
+  ch.on('broadcast',{event:'hello'},()=>send());
+  ch.on('presence',{event:'sync'},presence);
+  await new Promise((res,rej)=>ch.subscribe(s=>{if(s==='SUBSCRIBED')res();if(s==='CHANNEL_ERROR'||s==='TIMED_OUT')rej(new Error('x'))}));
   await ch.track({role:r});
-  if(r==='host'){hb=setInterval(sendState,2000);bindHost()}
-  else{ch.send({type:'broadcast',event:'hello',payload:{}})}
+  if(r==='host')hb=setInterval(send,3000);else ch.send({type:'broadcast',event:'hello',payload:{}});
 }
-
-function peers(){const st=ch.presenceState();let h=0,vw=0;Object.keys(st).forEach(k=>{k.startsWith('host')?h++:vw++});return {h,vw}}
-function updatePresence(){
-  const {h,vw}=peers();
-  if(role==='host'){$('peerP').textContent=vw?vw+' watching':'nobody yet';$('peerP').classList.toggle('on',vw>0)}
-  else{$('peerP').textContent=h?'host connected':'host offline';$('peerP').classList.toggle('on',h>0);
-    if(!h&&hostSeen){$('vStat').textContent='Host left the room.'}
-    if(h)hostSeen=true}
+async function api(path,payload){
+  const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,pin:$('pinIn').value})});
+  const d=await r.json().catch(()=>({}));
+  return{status:r.status,ok:r.ok,d};
 }
-
-// ---------- host ----------
-function snapshot(){return {src:curSrc,local:localName,t:v.currentTime||0,paused:v.paused,rate:v.playbackRate}}
-function sendState(){if(role!=='host'||!ch)return;ch.send({type:'broadcast',event:'state',payload:snapshot()})}
-function bindHost(){
-  ['play','pause','seeked','ratechange'].forEach(e=>v.addEventListener(e,sendState));
-  v.addEventListener('timeupdate',()=>{
-    if(v.duration)$('seek').value=Math.round(v.currentTime/v.duration*1000);
-    $('tCur').textContent=fmt(v.currentTime);$('tDur').textContent=fmt(v.duration);
-  });
-  v.addEventListener('play',()=>$('bPlay').textContent='⏸ Pause');
-  v.addEventListener('pause',()=>$('bPlay').textContent='▶ Play');
-  $('bPlay').onclick=()=>v.paused?v.play():v.pause();
-  $('b10').onclick=()=>{v.currentTime=Math.max(0,v.currentTime-10)};
-  $('f10').onclick=()=>{v.currentTime=Math.min(v.duration||1e9,v.currentTime+10)};
-  $('seek').oninput=e=>{if(v.duration)v.currentTime=e.target.value/1000*v.duration};
-  $('loadUrl').onclick=()=>{const u=$('urlIn').value.trim();if(!/^https?:\/\//i.test(u))return;localName=null;setSource(u);sendState()};
-  $('fileIn').onchange=e=>{const f=e.target.files[0];if(!f)return;localName=f.name+'|'+f.size;curSrc='local:'+localName;if(hls){hls.destroy();hls=null}v.src=URL.createObjectURL(f);$('stageMsg').classList.add('hide');sendState()};
-}
-
-// ---------- viewer ----------
-function onState(s){
-  if(role!=='viewer')return;
-  hostSeen=true;
-  if(s.local){
-    $('viewerFile').classList.remove('hide');
-    if(curSrc!=='local:'+s.local){$('stageMsg').textContent='Pick the same file the host chose.';$('stageMsg').classList.remove('hide');window.__want=s;return}
-  } else {
-    $('viewerFile').classList.add('hide');
-    if(s.src&&s.src!==curSrc)setSource(s.src);
-  }
-  if(!s.src)return;
-  apply(s);
-}
-function apply(s){
-  v.playbackRate=s.rate||1;
-  const target=s.t+(s.paused?0:0.25);
-  if(Math.abs(v.currentTime-target)>1.2&&v.readyState>0)v.currentTime=target;
-  if(s.paused&&!v.paused)v.pause();
-  if(!s.paused&&v.paused){
-    v.play().then(()=>$('tapPlay').classList.add('hide')).catch(()=>$('tapPlay').classList.remove('hide'));
-  }
-  $('vStat').textContent=s.paused?'Paused by host.':'Playing in sync.';
-}
-$('tapPlay').onclick=()=>{v.play().then(()=>$('tapPlay').classList.add('hide'))};
-$('vFileIn').onchange=e=>{
-  const f=e.target.files[0];if(!f)return;
-  const key=f.name+'|'+f.size;
-  if(window.__want&&window.__want.local!==key){$('stageMsg').textContent='That is a different file than the host picked.';$('stageMsg').classList.remove('hide');return}
-  curSrc='local:'+key;v.src=URL.createObjectURL(f);$('stageMsg').classList.add('hide');
-  if(window.__want)v.addEventListener('loadedmetadata',()=>apply(window.__want),{once:true});
+$('startBtn').onclick=async()=>{
+  $('startBtn').disabled=true;$('startErr').textContent='';
+  try{
+    const{status,ok,d}=await api('/api/session',{});
+    if(status===401){$('pinIn').classList.remove('hide');$('startErr').textContent='Enter the host PIN.';return}
+    if(!ok)throw new Error(d.error||'failed');
+    sess=d;mode='browse';render(d.url);send();
+    $('startCard').classList.add('hide');$('urlCard').classList.remove('hide');applyMode();
+  }catch(e){$('startErr').textContent=String(e.message||e)}
+  finally{$('startBtn').disabled=false}
 };
+$('goBtn').onclick=async()=>{
+  const u=$('urlIn').value.trim();if(!u||!sess)return;
+  $('goBtn').disabled=true;$('navErr').textContent='';
+  try{
+    const{ok,d}=await api('/api/control',{id:sess.id,action:'goto',url:u});
+    if(!ok)throw new Error(d.error||'failed');
+    $('urlIn').value=d.url||u;
+  }catch(e){$('navErr').textContent=String(e.message||e)}
+  finally{$('goBtn').disabled=false}
+};
+$('urlIn').addEventListener('keydown',e=>{if(e.key==='Enter')$('goBtn').click()});
+$('modeBrowse').onclick=()=>{mode='browse';applyMode()};
+$('modeVideo').onclick=()=>{mode='video';applyMode()};
 
-// ---------- home ----------
+async function vid(cmd,value){
+  if(!sess||busy)return;busy=true;
+  try{
+    const{ok,d}=await api('/api/control',{id:sess.id,action:'video',cmd,value});
+    if(ok&&d.ok){const s=d.state;$('vStat').textContent=(s.paused?'Paused':'Playing')+' — '+fmt(s.t)+' / '+fmt(s.d);$('vVol').value=Math.round(s.vol*100);$('volN').textContent=Math.round(s.vol*100)}
+    else $('vStat').textContent=(d&&d.error)||'Could not control the video.';
+  }catch(e){$('vStat').textContent='Control failed, try again.'}
+  finally{busy=false}
+}
+function fmt(s){s=Math.max(0,s||0);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=Math.floor(s%60);return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0')}
+$('vPlay').onclick=()=>vid('toggle');
+$('vBack').onclick=()=>vid('seek',-10);
+$('vFwd').onclick=()=>vid('seek',10);
+$('vVol').oninput=e=>{$('volN').textContent=e.target.value};
+$('vVol').onchange=e=>vid('volume',e.target.value/100);
+
 async function leave(){
   if(hb){clearInterval(hb);hb=null}
+  if(role==='host'&&sess){api('/api/session',{release:true,id:sess.id}).catch(()=>{})}
   if(ch){await sb.removeChannel(ch);ch=null}
-  v.pause();v.removeAttribute('src');v.load();if(hls){hls.destroy();hls=null}
-  curSrc=null;localName=null;hostSeen=false;window.__want=null;
-  $('stageMsg').textContent='Waiting for the host to pick a video…';$('stageMsg').classList.remove('hide');
+  sess=null;shownUrl=null;render(null);
+  $('urlCard').classList.add('hide');$('videoCard').classList.add('hide');
   show('home');
 }
 $('leave').onclick=leave;
-
 $('hostBtn').onclick=async()=>{
   $('hostBtn').disabled=true;
   try{
     for(let i=0;i<8;i++){
       const c=String(Math.floor(1000+Math.random()*9000));
-      const probe=sb.channel('room-'+c,{config:{presence:{key:'probe-'+Math.random()}}});
+      const p=sb.channel('room-b-'+c,{config:{presence:{key:'probe-'+Math.random()}}});
       const taken=await new Promise(res=>{
-        probe.on('presence',{event:'sync'},()=>{const s=probe.presenceState();res(Object.keys(s).some(k=>k.startsWith('host')))});
-        probe.subscribe(st=>{if(st==='SUBSCRIBED')setTimeout(()=>res(Object.keys(probe.presenceState()).some(k=>k.startsWith('host'))),600);if(st==='CHANNEL_ERROR')res(true)});
+        p.on('presence',{event:'sync'},()=>res(Object.keys(p.presenceState()).some(k=>k.startsWith('host'))));
+        p.subscribe(s=>{if(s==='SUBSCRIBED')setTimeout(()=>res(Object.keys(p.presenceState()).some(k=>k.startsWith('host'))),600);if(s==='CHANNEL_ERROR')res(true)});
       });
-      await sb.removeChannel(probe);
+      await sb.removeChannel(p);
       if(!taken){await open('host',c);return}
     }
-    $('homeErr').textContent='Could not find a free code, try again.';
+    $('homeErr').textContent='No free code, try again.';
   }catch(e){$('homeErr').textContent='Connection problem, try again.'}
   finally{$('hostBtn').disabled=false}
 };
-
 $('joinBtn').onclick=async()=>{
   const c=$('codeIn').value.trim();
   if(!/^\d{4}$/.test(c)){$('homeErr').textContent='Enter the 4-digit code.';return}
   $('homeErr').textContent='';$('joinBtn').disabled=true;
-  try{
-    await open('viewer',c);
-    // check for a host after presence settles
-    setTimeout(()=>{if(role==='viewer'&&!peers().h){$('vStat').textContent='No host in this room yet. Waiting…'}},1500);
-    v.muted=false;v.play().catch(()=>{});v.pause();
-  }catch(e){$('homeErr').textContent='Could not join, try again.'}
+  try{await open('viewer',c);setTimeout(()=>{if(role==='viewer'&&!peers().h&&$('stageMsg'))$('stageMsg').textContent='No host in this room yet…'},1500)}
+  catch(e){$('homeErr').textContent='Could not join, try again.'}
   finally{$('joinBtn').disabled=false}
 };
 $('codeIn').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'').slice(0,4)});
