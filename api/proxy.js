@@ -71,6 +71,7 @@ export default async function handler(req, res) {
     });
     clearTimeout(timer);
     const ct = r.headers.get('content-type') || '';
+    try { if (isPrivateHost(new URL(r.url).hostname)) return res.status(400).send('Blocked host'); } catch { return res.status(502).send('Bad redirect'); }
     if (!ct.includes('text/html')) {
       const buf = Buffer.from(await r.arrayBuffer());
       res.setHeader('Content-Type', ct || 'application/octet-stream');
