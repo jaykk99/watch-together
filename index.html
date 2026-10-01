@@ -3,159 +3,199 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0b0b12">
-<title>Watch Together — Browser</title>
-<style>
-:root{--bg:#0b0b12;--card:#171725;--fg:#f2f2f7;--mut:#8b8ba3;--acc:#7c5cff;--ok:#2ecc71;--bad:#ff5c7a}
-*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-body{padding:env(safe-area-inset-top) 12px env(safe-area-inset-bottom)}
-.wrap{max-width:900px;margin:0 auto;padding:16px 0}
-h1{font-size:24px;margin:6px 0 4px}p.sub{color:var(--mut);margin:0 0 20px}
-.card{background:var(--card);border-radius:16px;padding:14px;margin-bottom:12px}
-button{font:inherit;border:0;border-radius:12px;padding:13px 14px;background:var(--acc);color:#fff;font-weight:600;width:100%}
-button.sec{background:#26263a}button:disabled{opacity:.5}
-input[type=text],input[type=tel],input[type=url]{width:100%;font:inherit;padding:13px;border-radius:12px;border:1px solid #2b2b42;background:#0f0f1a;color:var(--fg)}
-input.code{font-size:32px;text-align:center;letter-spacing:.4em;margin:10px 0}
-.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}.row>.fit{flex:0 0 auto}
-.hide{display:none!important}
-.big{font-size:40px;font-weight:800;letter-spacing:.25em;text-align:center;margin:4px 0}
-.pill{display:inline-block;padding:4px 10px;border-radius:99px;font-size:13px;background:#26263a;color:var(--mut);text-align:center}
-.pill.on{background:#12351f;color:var(--ok)}
-.stage{position:relative;background:#000;border-radius:14px;overflow:hidden;aspect-ratio:16/9;width:100%}
-.stage:fullscreen,.stage:-webkit-full-screen{aspect-ratio:auto;width:100vw;height:100vh;border-radius:0}
-.stage iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
-.shield{position:absolute;inset:0;z-index:5}
-.msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;color:var(--mut)}
-small{color:var(--mut)}.err{color:var(--bad);min-height:1em;margin:8px 0 0}
-a{color:var(--acc)}
-</style>
+<meta name="theme-color" content="#0a0a13">
+<title>Watch Together — Cloud Browser</title>
+<link rel="stylesheet" href="/assets/wt.css">
 </head>
 <body>
 <div class="wrap">
 
+<!-- ============ LOBBY ============ -->
 <section id="home">
- <h1>🌐 Watch Together Browser</h1>
- <p class="sub">The host shares a link. Everyone in the room sees the same page.</p>
- <div class="card"><button id="hostBtn">Host a room</button></div>
+ <h1>🌐 Watch <span class="grad">Together</span> Browser</h1>
+ <p class="sub">The host shares a link. Everyone in the room sees the same page — through an ad-stripping proxy.</p>
  <div class="card">
-  <small>Join a room</small>
+  <h3>Your name</h3>
+  <input id="nameIn" type="text" placeholder="e.g. Jay" maxlength="24" autocomplete="off">
+ </div>
+ <div class="card"><button id="hostBtn">🌐 Host a room</button></div>
+ <div class="card">
+  <h3>Join a room</h3>
   <input id="codeIn" class="code" type="tel" inputmode="numeric" maxlength="4" placeholder="0000">
   <button id="joinBtn" class="sec">Join</button>
   <p class="err" id="homeErr"></p>
  </div>
+ <div class="feat">
+  <div>🛡 Ads &amp; popups stripped</div>
+  <div>💬 Live chat &amp; reactions</div>
+  <div>👥 See who's watching</div>
+  <div>🔗 Shareable invite links</div>
+ </div>
  <small>Have a direct video link or file instead? <a href="/player">Use the synced player</a>.</small>
 </section>
 
+<!-- ============ ROOM ============ -->
 <section id="room" class="hide">
- <div class="card">
-  <div class="row"><span class="pill" id="roleP"></span><span class="pill" id="peerP"></span></div>
-  <div class="big" id="codeBig"></div>
-  <small id="hint"></small>
+ <div class="topbar">
+  <button id="leaveTop" class="ghost iconbtn" style="width:auto">← Leave</button>
+  <div class="codechip"><span id="codeBig">····</span><button id="copyCode" class="sec">Copy</button><button id="copyLink" class="sec">🔗 Invite</button></div>
+  <div class="spacer"></div>
+  <span class="pill" id="roleP"></span>
+  <span class="pill" id="peerP">…</span>
  </div>
 
- <div class="card hide" id="urlCard">
-  <div class="row"><input id="urlIn" type="url" placeholder="Paste a website link" autocapitalize="off" autocorrect="off"><button class="fit" id="goBtn" style="width:auto">Go</button></div>
-  <p class="err" id="navErr"></p>
-  <small>Links load through an ad-stripping proxy. Most sites work, but some heavy JS sites or logins may not — try another link if a page looks broken.</small>
+ <div class="roomgrid">
+  <div>
+   <div class="card hide" id="urlCard">
+    <div class="row"><input id="urlIn" type="url" placeholder="Paste a website link" autocapitalize="off" autocorrect="off"><button class="fit" id="goBtn" style="width:auto">Go</button></div>
+    <p class="err" id="navErr"></p>
+    <small>Links load through an ad-stripping proxy. Heavy JS sites or logins may not work — try another link if a page looks broken.</small>
+   </div>
+   <div class="stage" id="stage"><div class="msg" id="stageMsg">Waiting for the host to open a site…</div></div>
+   <div class="row" style="margin-top:10px">
+    <button class="sec fit iconbtn" id="fsBtn" style="width:auto">⛶ Fullscreen</button>
+    <small id="pageLbl" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></small>
+   </div>
+  </div>
+
+  <aside>
+   <div class="card">
+    <h3>Watching <span id="pcount"></span></h3>
+    <ul id="roster"></ul>
+    <h3 style="margin-top:14px">React</h3>
+    <div class="reacts" id="reacts"></div>
+   </div>
+   <div class="card chatcard">
+    <h3>Chat</h3>
+    <ul id="chat"></ul>
+    <div id="chatEmpty">No messages yet — say hi 👋</div>
+    <div class="chatbox"><input id="chatIn" type="text" placeholder="Message…" maxlength="500" autocomplete="off"><button id="chatSend">Send</button></div>
+   </div>
+  </aside>
  </div>
-
- <div class="stage" id="stage"><div class="msg" id="stageMsg">Waiting for the host to open a site…</div></div>
-
- <button class="sec" id="fsBtn" style="margin-top:10px">⛶ Fullscreen</button>
- <button class="sec" id="leave" style="margin-top:12px">Leave room</button>
 </section>
 
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/assets/wt.js"></script>
 <script>
-const sb=supabase.createClient('https://fhbqxujlnqlmzvulrdxt.supabase.co','sb_publishable_adcZmpDjIVXM1qB5UYS-Dg_iZeGh2uT');
-const $=id=>document.getElementById(id);
-let ch=null,role=null,hb=null,curUrl=null,shownUrl=null;
-function show(id){['home','room'].forEach(x=>$(x).classList.toggle('hide',x!==id))}
-function peers(){const st=ch.presenceState();let h=0,v=0;Object.keys(st).forEach(k=>k.startsWith('host')?h++:v++);return{h,v}}
-function presence(){
-  const{h,v}=peers();
-  if(role==='host'){$('peerP').textContent=v?v+' watching':'nobody yet';$('peerP').classList.toggle('on',v>0)}
-  else{$('peerP').textContent=h?'host connected':'host offline';$('peerP').classList.toggle('on',h>0)}
-}
+(function(){
+'use strict';
+var $=WT.$;
+var session=null, role=null, hb=null, curUrl=null, shownUrl=null;
+
+function show(id){['home','room'].forEach(function(x){$(x).classList.toggle('hide',x!==id)})}
+
 function render(url){
-  if(url===shownUrl)return;shownUrl=url;
-  const stage=$('stage');stage.innerHTML='';
-  if(!url){stage.innerHTML='<div class="msg">'+(role==='host'?'Paste a link above and hit Go.':'Waiting for the host to open a site…')+'</div>';return}
-  const f=document.createElement('iframe');f.src='/api/proxy?url='+encodeURIComponent(url);f.allow='autoplay; fullscreen; encrypted-media; picture-in-picture';f.setAttribute('allowfullscreen','');f.setAttribute('sandbox','allow-scripts allow-same-origin allow-forms allow-presentation');f.referrerPolicy='no-referrer-when-downgrade';
+  if(url===shownUrl)return; shownUrl=url;
+  var stage=$('stage'); stage.innerHTML='';
+  $('pageLbl').textContent=url||'';
+  if(!url){
+    var d=document.createElement('div');d.className='msg';d.id='stageMsg';
+    d.textContent=role==='host'?'Paste a link above and hit Go.':'Waiting for the host to open a site…';
+    stage.appendChild(d);return;
+  }
+  var wrap=document.createElement('div');wrap.className='msg';wrap.id='stageMsg';
+  wrap.innerHTML='<div><div class="spin"></div>Loading page…</div>';
+  stage.appendChild(wrap);
+  var f=document.createElement('iframe');
+  f.src='/api/proxy?url='+encodeURIComponent(url);
+  f.allow='autoplay; fullscreen; encrypted-media; picture-in-picture';
+  f.setAttribute('allowfullscreen','');
+  f.setAttribute('sandbox','allow-scripts allow-same-origin allow-forms allow-presentation');
+  f.referrerPolicy='no-referrer-when-downgrade';
+  f.addEventListener('load',function(){var m=$('stageMsg');if(m)m.remove()});
   stage.appendChild(f);
-  if(role!=='host'){const s=document.createElement('div');s.className='shield';stage.appendChild(s)}
+  if(role!=='host'){var s=document.createElement('div');s.className='shield';stage.appendChild(s)}
 }
-function send(){if(role==='host'&&ch)ch.send({type:'broadcast',event:'state',payload:{url:curUrl}})}
+function send(){if(role==='host'&&session)session.send('state',{url:curUrl})}
+
 async function open(r,c){
-  role=r;show('room');
+  role=r; show('room');
   $('roleP').textContent=r==='host'?'HOST':'VIEWER';$('roleP').classList.toggle('on',r==='host');
   $('codeBig').textContent=c;
   $('urlCard').classList.toggle('hide',r!=='host');
-  $('hint').textContent=r==='host'?'Tell your friend to open this page and enter the code.':'The host picks the page. You just watch.';
-  ch=sb.channel('room-b-'+c,{config:{broadcast:{self:false},presence:{key:r+'-'+Math.random().toString(36).slice(2,7)}}});
-  ch.on('broadcast',{event:'state'},({payload})=>{if(role==='viewer')render(payload.url)});
-  ch.on('broadcast',{event:'hello'},()=>send());
-  ch.on('presence',{event:'sync'},presence);
-  await new Promise((res,rej)=>ch.subscribe(s=>{if(s==='SUBSCRIBED')res();if(s==='CHANNEL_ERROR'||s==='TIMED_OUT')rej(new Error('x'))}));
-  await ch.track({role:r});
-  if(r==='host')hb=setInterval(send,3000);else ch.send({type:'broadcast',event:'hello',payload:{}});
+  render(null);
+  WT.bindReacts({send:function(ev,p){session&&session.send(ev,p)}},$('stage'),$('reacts'));
+  session=await WT.openRoom({prefix:'room-b',code:c,role:r,handlers:{
+    onState:function(p){if(role==='viewer')render(p.url)},
+    onHello:function(){send()},
+    onPresence:function(list){
+      WT.renderRoster($('roster'),$('pcount'),list);
+      var pill=$('peerP');
+      if(role==='host'){
+        var n=list.filter(function(p){return p.role==='viewer'}).length;
+        pill.textContent=n?n+' watching':'nobody yet';pill.classList.toggle('on',n>0);
+      }else{
+        var h=list.some(function(p){return p.role==='host'});
+        pill.textContent=h?'host connected':'host offline';pill.classList.toggle('on',h);
+      }
+    },
+    onPeerJoin:function(p){WT.toast(p.name+' joined');if(role==='host')send()},
+    onPeerLeave:function(p){WT.toast(p.name+' left')},
+    onChat:function(m){WT.addChat($('chat'),$('chatEmpty'),m,session.name)},
+    onReact:function(m){WT.floatReact($('stage'),m.emoji);WT.toast(m.from+' '+m.emoji)},
+  }});
+  WT.bindChat(session,$('chat'),$('chatEmpty'),$('chatIn'),$('chatSend'));
+  if(r==='host'){hb=setInterval(send,3000)}
+  else{
+    session.send('hello');
+    setTimeout(function(){
+      if(role==='viewer'&&!shownUrl){
+        var m=$('stageMsg');if(m)m.textContent='No host in this room yet…';
+      }
+    },4000);
+  }
+  WT.toast(r==='host'?'Room '+c+' is live 🌐':'Joined room '+c,'good');
 }
-$('goBtn').onclick=()=>{
-  let u=$('urlIn').value.trim();if(!u)return;
+
+$('goBtn').onclick=function(){
+  var u=$('urlIn').value.trim();if(!u)return;
   $('navErr').textContent='';
   if(!/^https?:\/\//i.test(u))u='https://'+u;
+  try{new URL(u)}catch(e){$('navErr').textContent='That does not look like a valid link.';return}
   curUrl=u;$('urlIn').value=u;render(u);send();
 };
-$('urlIn').addEventListener('keydown',e=>{if(e.key==='Enter')$('goBtn').click()});
+$('urlIn').addEventListener('keydown',function(e){if(e.key==='Enter')$('goBtn').click()});
+
+$('copyCode').onclick=function(){WT.copyText($('codeBig').textContent).then(function(ok){WT.toast(ok?'Code copied':'Copy failed',ok?'good':'bad')})};
+$('copyLink').onclick=function(){WT.copyText(WT.inviteLink($('codeBig').textContent)).then(function(ok){WT.toast(ok?'Invite link copied — send it to your friend':'Copy failed',ok?'good':'bad')})};
 
 async function leave(){
   if(hb){clearInterval(hb);hb=null}
-  if(ch){await sb.removeChannel(ch);ch=null}
-  curUrl=null;shownUrl=null;render(null);
+  if(session){await session.leave();session=null}
+  curUrl=null;shownUrl=null;role=null;
+  $('chat').innerHTML='';$('chatEmpty').classList.remove('hide');
+  $('roster').innerHTML='';$('reacts').innerHTML='';$('pageLbl').textContent='';
   $('urlCard').classList.add('hide');
+  $('hostBtn').disabled=false;
   show('home');
 }
-$('leave').onclick=leave;
-$('hostBtn').onclick=async()=>{
+$('leaveTop').onclick=leave;
+
+$('nameIn').value=WT.getName();
+$('nameIn').addEventListener('change',function(e){WT.setName(e.target.value);WT.toast('Name saved','good')});
+WT.prefillFromQuery($('codeIn'));
+$('hostBtn').onclick=async function(){
+  WT.setName($('nameIn').value);
   $('hostBtn').disabled=true;
-  try{
-    for(let i=0;i<8;i++){
-      const c=String(Math.floor(1000+Math.random()*9000));
-      const p=sb.channel('room-b-'+c,{config:{presence:{key:'probe-'+Math.random()}}});
-      const taken=await new Promise(res=>{
-        p.on('presence',{event:'sync'},()=>res(Object.keys(p.presenceState()).some(k=>k.startsWith('host'))));
-        p.subscribe(s=>{if(s==='SUBSCRIBED')setTimeout(()=>res(Object.keys(p.presenceState()).some(k=>k.startsWith('host'))),600);if(s==='CHANNEL_ERROR')res(true)});
-      });
-      await sb.removeChannel(p);
-      if(!taken){await open('host',c);return}
-    }
-    $('homeErr').textContent='No free code, try again.';
-  }catch(e){$('homeErr').textContent='Connection problem, try again.'}
-  finally{$('hostBtn').disabled=false}
+  try{var c=await WT.allocCode('room-b');await open('host',c)}
+  catch(e){$('homeErr').textContent='Could not start a room, try again.';$('hostBtn').disabled=false}
 };
-$('joinBtn').onclick=async()=>{
-  const c=$('codeIn').value.trim();
+$('joinBtn').onclick=async function(){
+  var c=$('codeIn').value.trim();
   if(!/^\d{4}$/.test(c)){$('homeErr').textContent='Enter the 4-digit code.';return}
+  WT.setName($('nameIn').value);
   $('homeErr').textContent='';$('joinBtn').disabled=true;
-  try{await open('viewer',c);setTimeout(()=>{if(role==='viewer'&&!peers().h&&$('stageMsg'))$('stageMsg').textContent='No host in this room yet…'},1500)}
+  try{await open('viewer',c)}
   catch(e){$('homeErr').textContent='Could not join, try again.'}
   finally{$('joinBtn').disabled=false}
 };
-$('codeIn').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'').slice(0,4)});
+$('codeIn').addEventListener('input',function(e){e.target.value=e.target.value.replace(/\D/g,'').slice(0,4)});
 
-const stageEl=$('stage');
-function isFs(){return document.fullscreenElement||document.webkitFullscreenElement}
-$('fsBtn').onclick=async()=>{
-  if(!isFs()){
-    try{await (stageEl.requestFullscreen?stageEl.requestFullscreen():stageEl.webkitRequestFullscreen())}catch(e){return}
-    if(screen.orientation&&screen.orientation.lock)screen.orientation.lock('landscape').catch(()=>{});
-  }else{
-    if(screen.orientation&&screen.orientation.unlock)try{screen.orientation.unlock()}catch(e){}
-    document.exitFullscreen?document.exitFullscreen():document.webkitExitFullscreen&&document.webkitExitFullscreen();
-  }
-};
+WT.bindFullscreen($('fsBtn'),$('stage'),null);
+})();
 </script>
 </body>
 </html>

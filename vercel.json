@@ -1,6 +1,1 @@
-{
-  "cleanUrls": true,
-  "functions": {
-    "api/proxy.js": { "maxDuration": 20 }
-  }
-}
+{"cleanUrls":true,"functions":{"api/proxy.js":{"maxDuration":20}},"headers":[{"headers":[{"key":"Cache-Control","value":"public, max-age=86400, immutable"}],"source":"/assets/(.*)"}]}
