@@ -8,7 +8,7 @@ Watch together on two devices with a 4-digit room code. No install, no account, 
 The host shares a link. `api/proxy.js` fetches it server-side, strips common ad/tracker tags and popup-redirect scripts, and serves it back from our own domain so it can be embedded even on sites that normally block framing. It loads in a real, sandboxed `<iframe>` (no popups, no top-level redirects) on the host's and every viewer's device; the viewer's copy is shielded so only the host can click. No signup, no API keys.
 
 **`/player` — synced player**
-The host loads a direct `.mp4` / `.m3u8` link or a local file. Play, pause, seek and rewind/forward 10s sync to the viewer. Viewers use smooth drift correction: small drift is absorbed by nudging playback rate (no jarring seeks), large drift re-seeks, and a live sync indicator shows Δ seconds. A stall watchdog re-asks the host for state if no update arrives.
+The host loads a direct `.mp4` / `.m3u8` link or a local file. Play, pause, seek and rewind/forward 10s sync to the viewer. Sync snapshots carry a wall-clock timestamp, so viewers project the host's true position instead of guessing network delay; drift correction is handled by the tested pure module `assets/sync.js` (hard seek beyond 2.5s, ±6% rate nudge beyond 0.6s, live Δ indicator). Viewers report drift back every 5s and the host sees an "N in sync" count. The host can attach a `.vtt` subtitle track that syncs to viewers. If the host leaves, the longest-present viewer is promoted automatically. If the realtime link drops, the client retries with backoff and rejoins the same room. A stall watchdog re-asks the host for state if no update arrives.
 
 Both rooms now include: display names, a live participant roster, room chat, emoji reactions, copy-code / copy-invite-link buttons (`?room=1234` deep links), toasts, and a modern responsive layout.
 
@@ -32,7 +32,7 @@ Use only sources you have the rights to watch.
 
 ## Tests
 
-`npm test` — 47 tests for `api/proxy.js`: SSRF host blocking (dotted/octal/hex/decimal IP forms), ad stripping, 405/400/429 status paths, per-IP rate limiting, and a live end-to-end fetch of example.com through the handler.
+`npm test` — proxy suite (47 tests for `api/proxy.js`: SSRF host blocking in dotted/octal/hex/decimal forms, ad stripping, 405/400/429 paths, per-IP rate limiting, live end-to-end fetch) plus `tests/sync.test.mjs` (19 tests for the sync math in `assets/sync.js`: timestamp projection, drift-decision boundaries, snapshot building, status text).
 
 ## Setup
 

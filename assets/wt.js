@@ -63,12 +63,14 @@
     var myKey = role + '-' + Math.random().toString(36).slice(2, 9);
     var ch = sb.channel(prefix + '-' + code, { config: { broadcast: { self: false }, presence: { key: myKey } } });
     var known = {};
+    var seenAt = {}; // presence key -> first-seen wall clock (for host migration order)
+    var resolved = false;
     var session;
     function peers() {
       var st = ch ? ch.presenceState() : {}, out = [];
       Object.keys(st).forEach(function (k) {
         var meta = (st[k] && st[k][0]) || {};
-        out.push({ key: k, role: meta.role || (isHostKey(k) ? 'host' : 'viewer'), name: meta.name || 'Guest', self: k === myKey });
+        out.push({ key: k, role: meta.role || (isHostKey(k) ? 'host' : 'viewer'), name: meta.name || 'Guest', self: k === myKey, joinedAt: seenAt[k] || 0 });
       });
       out.sort(function (a, b) {
         if (a.role !== b.role) return a.role === 'host' ? -1 : 1;
@@ -78,8 +80,13 @@
     }
     function syncPresence() {
       var list = peers();
+      var now = Date.now();
       var map = {};
-      list.forEach(function (p) { map[p.key] = p; });
+      list.forEach(function (p) {
+        map[p.key] = p;
+        if (!seenAt[p.key]) seenAt[p.key] = now;
+        p.joinedAt = seenAt[p.key];
+      });
       list.forEach(function (p) { if (!p.self && !known[p.key] && h.onPeerJoin) h.onPeerJoin(p); });
       Object.keys(known).forEach(function (k) { if (!map[k] && h.onPeerLeave) h.onPeerLeave(known[k]); });
       known = map;
@@ -89,20 +96,26 @@
     ch.on('broadcast', { event: 'hello' }, function () { if (h.onHello) h.onHello(); });
     ch.on('broadcast', { event: 'chat' }, function (m) { if (h.onChat) h.onChat(m.payload); });
     ch.on('broadcast', { event: 'react' }, function (m) { if (h.onReact) h.onReact(m.payload); });
+    ch.on('broadcast', { event: 'syncstat' }, function (m) { if (h.onSyncstat) h.onSyncstat(m.payload); });
     ch.on('presence', { event: 'sync' }, syncPresence);
     ch.on('presence', { event: 'join' }, syncPresence);
     ch.on('presence', { event: 'leave' }, syncPresence);
     session = {
-      channel: ch, code: code, role: role, name: name,
+      channel: ch, code: code, role: role, name: name, myKey: myKey,
       send: function (event, payload) { if (ch) ch.send({ type: 'broadcast', event: event, payload: payload || {} }); },
       peers: peers,
+      retrack: function (r) { role = r; if (ch) return ch.track({ role: r, name: name }); },
       leave: async function () { if (ch) { await sb.removeChannel(ch); ch = null; } },
     };
     return new Promise(function (res, rej) {
       ch.subscribe(function (st) {
         if (st === 'SUBSCRIBED') {
-          ch.track({ role: role, name: name }).then(function () { syncPresence(); res(session); }).catch(rej);
-        } else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') rej(new Error('connect'));
+          ch.track({ role: role, name: name }).then(function () { resolved = true; syncPresence(); res(session); }).catch(rej);
+        } else if (st === 'TIMED_OUT' || st === 'CHANNEL_ERROR' || st === 'CLOSED') {
+          // After a successful join, these mean the realtime link dropped.
+          if (resolved) { if (h.onConnection) h.onConnection(st); }
+          else rej(new Error('connect'));
+        }
       });
     });
   }

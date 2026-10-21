@@ -73,6 +73,10 @@
      <div class="row" style="margin-top:8px"><label class="file">📁 Pick a video file<input id="fileIn" type="file" accept="video/*" hidden></label></div>
      <small style="display:block;margin-top:8px">With a file, each viewer picks the same file on their own device; playback still syncs.</small>
     </div>
+    <div style="margin-top:12px">
+     <small>Subtitles (.vtt link, optional)</small>
+     <div class="row" style="margin-top:8px"><input id="subIn" type="url" placeholder="https://…/captions.vtt" autocapitalize="off" autocorrect="off"><button class="fit sec" id="loadSub" style="width:auto">CC</button></div>
+    </div>
    </div>
 
    <div id="viewerCtl" class="card hide" style="margin-top:12px">
@@ -106,13 +110,15 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+<script src="/assets/sync.js"></script>
 <script src="/assets/wt.js"></script>
 <script>
 (function(){
 'use strict';
 var $=WT.$, v=$('v');
-var session=null, role=null, hls=null, hb=null;
-var curSrc=null, localName=null, applying=false, hostSeen=false, lastState=null, lastApply=0;
+var session=null, role=null, hls=null, hb=null, statTimer=null, hostBound=false;
+var curSrc=null, localName=null, curSub=null, hostSeen=false, lastState=null, lastApply=0, lastDrift=0;
+var reconnectTries=0, reconnectTimer=null;
 
 var pad=function(n){return String(Math.floor(n)).padStart(2,'0')};
 var fmt=function(s){s=Math.max(0,s||0);var h=Math.floor(s/3600),m=Math.floor(s%3600/60);return (h?h+':'+pad(m):m)+':'+pad(s%60)};
@@ -123,9 +129,21 @@ function setConn(txt,cls){var p=$('connP');p.textContent=txt;p.className='pill'+
 function setSource(src){
   if(hls){hls.destroy();hls=null}
   curSrc=src;
+  // drop any subtitle tracks from the previous source
+  Array.prototype.slice.call(v.querySelectorAll('track')).forEach(function(t){t.remove()});
   if(/\.m3u8(\?|$)/i.test(src)&&window.Hls&&Hls.isSupported()){hls=new Hls({maxBufferLength:30});hls.loadSource(src);hls.attachMedia(v)}
   else{v.src=src}
   hideMsg();
+  if(curSub)applySub(curSub);
+}
+function applySub(sub){
+  curSub=sub||null;
+  Array.prototype.slice.call(v.querySelectorAll('track')).forEach(function(t){t.remove()});
+  if(!sub||!sub.url)return;
+  var tr=document.createElement('track');
+  tr.kind='subtitles';tr.srclang='en';tr.label=sub.label||'Subtitles';tr.src=sub.url;
+  tr.addEventListener('load',function(){try{tr.track.mode='showing'}catch(e){}});
+  v.appendChild(tr);
 }
 function showMsg(html){var m=$('stageMsg');m.innerHTML=html;m.classList.remove('hide')}
 function hideMsg(){$('stageMsg').classList.add('hide')}
@@ -133,22 +151,22 @@ function hideMsg(){$('stageMsg').classList.add('hide')}
 /* ---------- sync: drift correction with smooth rate-nudge ---------- */
 function applyState(s){
   lastState=s; lastApply=Date.now();
-  v.playbackRate=s.rate||1;
-  var target=s.t;
-  if(!s.paused) target+=0.15; // half-RTT estimate
-  var drift=v.currentTime-target;
+  var target=WTSync.projectTarget(s,Date.now());
+  var drift=(v.readyState>0&&isFinite(v.duration))?v.currentTime-target:0;
+  var dec=WTSync.correctionDecision(drift,s.rate||1);
+  lastDrift=dec.drift;
   if(v.readyState>0&&isFinite(v.duration)){
-    if(Math.abs(drift)>2.5){ v.currentTime=target; }
-    else if(Math.abs(drift)>0.6){ v.playbackRate=(s.rate||1)*(drift>0?0.94:1.06); }
-  }
+    if(dec.action==='hard'){v.currentTime=target}
+    else{v.playbackRate=dec.rate}
+  }else if(!s.paused){v.playbackRate=s.rate||1}
   if(s.paused&&!v.paused)v.pause();
   if(!s.paused&&v.paused){
     v.play().then(function(){$('tapPlay').classList.add('hide')}).catch(function(){$('tapPlay').classList.remove('hide')});
   }
-  var d=$('syncDot'),t=$('syncTxt');
-  if(s.paused){d.className='dot';t.textContent='paused by host'}
-  else if(Math.abs(drift)<=0.6){d.className='dot ok';t.textContent='in sync · Δ'+Math.abs(drift).toFixed(1)+'s'}
-  else{d.className='dot';t.textContent='catching up · Δ'+Math.abs(drift).toFixed(1)+'s'}
+  if(s.sub&&(!curSub||curSub.url!==s.sub.url))applySub(s.sub);
+  var st=WTSync.statusText(dec,s.paused);
+  $('syncDot').className='dot'+(st.cls?' '+st.cls:'');
+  $('syncTxt').textContent=st.text;
   $('vStat').textContent=s.paused?'Paused by host.':'Playing in sync.';
 }
 function onState(s){
@@ -175,19 +193,25 @@ async function open(r,c){
   v.classList.toggle('locked',r!=='host');
   v.controls=false;
   setConn('connecting…');
+  syncStats={};
+  $('reacts').innerHTML='';
   WT.bindReacts({send:function(ev,p){session&&session.send(ev,p)}},$('stage'),$('reacts'));
   session=await WT.openRoom({prefix:'room',code:c,role:r,handlers:{
     onState:onState,
     onHello:function(){ if(role==='host') sendState(); },
+    onConnection:onConnection,
+    onSyncstat:function(m){ if(role==='host'&&m&&m.name){syncStats[m.name]={drift:Number(m.drift)||0,at:Date.now()};updateHostPill()} },
     onPresence:function(list){
       WT.renderRoster($('roster'),$('pcount'),list);
       var n=list.filter(function(p){return p.role==='host'}).length;
       if(role==='viewer'){
         if(n){setConn('host connected','on')}
-        else{setConn('host offline');if(hostSeen)$('vStat').textContent='Host left the room.'}
+        else{
+          setConn('host offline');
+          if(hostSeen){$('vStat').textContent='Host left the room.';maybePromote(list)}
+        }
       }else{
-        var vw=list.filter(function(p){return p.role==='viewer'}).length;
-        setConn(vw?vw+' watching':'nobody yet',vw?'on':'');
+        updateHostPill();
       }
     },
     onPeerJoin:function(p){WT.toast(p.name+' joined');if(role==='host')sendState()},
@@ -196,19 +220,89 @@ async function open(r,c){
     onReact:function(m){WT.floatReact($('stage'),m.emoji);WT.toast(m.from+' '+m.emoji)},
   }});
   WT.bindChat(session,$('chat'),$('chatEmpty'),$('chatIn'),$('chatSend'));
-  if(r==='host'){hb=setInterval(sendState,2000);bindHost()}
+  if(r==='host'){hb=setInterval(sendState,2000);bindHostOnce()}
   else{
     session.send('hello');
+    statTimer=setInterval(function(){
+      if(role==='viewer'&&session&&lastState)session.send('syncstat',{name:session.name,drift:lastDrift});
+    },5000);
     setTimeout(function(){if(role==='viewer'&&!hostSeen)setConn('no host yet…')},4000);
     v.play().catch(function(){});v.pause(); // unlock autoplay
   }
   WT.toast(r==='host'?'Room '+c+' is live 🎬':'Joined room '+c,'good');
 }
-function snapshot(){return{src:curSrc,local:localName,t:v.currentTime||0,paused:v.paused,rate:v.playbackRate}}
+function snapshot(){return WTSync.snapshot(v,{src:curSrc,local:localName,sub:curSub})}
 function sendState(){if(role!=='host'||!session)return;session.send('state',snapshot())}
 
+/* ---------- host: per-viewer sync stats ---------- */
+var syncStats={};
+function pruneStats(){var now=Date.now();Object.keys(syncStats).forEach(function(k){if(now-syncStats[k].at>12000)delete syncStats[k]})}
+function updateHostPill(){
+  if(role!=='host'||!session)return;
+  var vw=session.peers().filter(function(p){return p.role==='viewer'}).length;
+  pruneStats();
+  var ok=Object.keys(syncStats).filter(function(k){return Math.abs(syncStats[k].drift)<=WTSync.NUDGE_S}).length;
+  setConn(vw?(vw+' watching'+(ok?' · '+ok+' in sync':'')):'nobody yet',vw?'on':'');
+}
+
+/* ---------- host migration: longest-present viewer takes over ---------- */
+function maybePromote(list){
+  if(role!=='viewer'||!session||!hostSeen)return;
+  var me=null,oldest=null;
+  list.forEach(function(p){
+    if(p.self)me=p;
+    else if(p.role==='viewer'&&(!oldest||p.joinedAt<oldest.joinedAt))oldest=p;
+  });
+  if(me&&(!oldest||me.joinedAt<=oldest.joinedAt))promoteToHost();
+}
+function promoteToHost(){
+  role='host';syncStats={};
+  if(session&&session.retrack){session.retrack('host')}
+  $('roleP').textContent='HOST';$('roleP').classList.add('on');
+  $('hostCtl').classList.remove('hide');$('viewerCtl').classList.add('hide');
+  v.classList.remove('locked');v.controls=false;
+  if(lastState&&lastState.src&&lastState.src!==curSrc&&lastState.src.indexOf('local:')!==0)setSource(lastState.src);
+  if(lastState&&lastState.sub)applySub(lastState.sub);
+  bindHostOnce();hb=setInterval(sendState,2000);
+  WT.toast('The host left. You are now the host.','good');
+  setConn('hosting','on');
+  sendState();
+}
+
+/* ---------- reconnect with backoff ---------- */
+function onConnection(st){
+  if(!session||!role)return;
+  setConn('connection lost — retrying…');
+  scheduleReconnect();
+}
+function scheduleReconnect(){
+  clearTimeout(reconnectTimer);
+  if(reconnectTries>=6){setConn('reconnect failed — rejoin manually');return}
+  reconnectTimer=setTimeout(tryReconnect,Math.min(16000,1000*Math.pow(2,reconnectTries)));
+}
+async function tryReconnect(){
+  if(!role)return;
+  var keepCode=$('codeBig').textContent,keepRole=role;
+  var keepSrc=curSrc,keepLocal=localName,keepSub=curSub,keepT=v.currentTime,keepBlob=v.getAttribute('src')||v.src||null;
+  try{if(session){await session.leave();session=null}}catch(e){}
+  leave();
+  reconnectTries++;
+  try{
+    await open(keepRole,keepCode);
+    if(keepRole==='host'&&keepSrc){
+      if(keepSrc.indexOf('local:')===0&&keepBlob){curSrc=keepSrc;localName=keepLocal;v.src=keepBlob}
+      else if(keepSrc.indexOf('local:')!==0){setSource(keepSrc);try{v.currentTime=keepT}catch(e){}}
+      if(keepSub)applySub(keepSub);
+      sendState();
+    }
+    reconnectTries=0;
+    WT.toast('Reconnected','good');
+  }catch(e){scheduleReconnect()}
+}
+
 /* ---------- host controls ---------- */
-function bindHost(){
+function bindHostOnce(){
+  if(hostBound)return;hostBound=true;
   ['play','pause','seeked','ratechange'].forEach(function(e){v.addEventListener(e,sendState)});
   v.addEventListener('timeupdate',function(){
     if(v.duration){$('seek').value=Math.round(v.currentTime/v.duration*1000)}
@@ -229,6 +323,12 @@ function bindHost(){
     localName=f.name+'|'+f.size;curSrc='local:'+localName;
     if(hls){hls.destroy();hls=null}
     v.src=URL.createObjectURL(f);hideMsg();sendState();WT.toast('Local file loaded','good');
+  };
+  $('loadSub').onclick=function(){
+    var u=$('subIn').value.trim();
+    if(!u){applySub(null);sendState();WT.toast('Subtitles cleared');return}
+    if(!/^https?:\/\//i.test(u)){WT.toast('Paste a full https:// link','bad');return}
+    applySub({url:u,label:'Subtitles'});sendState();WT.toast('Subtitles loaded','good');
   };
 }
 
@@ -256,9 +356,11 @@ $('copyCode').onclick=function(){WT.copyText($('codeBig').textContent).then(func
 $('copyLink').onclick=function(){WT.copyText(WT.inviteLink($('codeBig').textContent)).then(function(ok){WT.toast(ok?'Invite link copied — send it to your friend':'Copy failed',ok?'good':'bad')})};
 async function leave(){
   if(hb){clearInterval(hb);hb=null}
+  if(statTimer){clearInterval(statTimer);statTimer=null}
+  clearTimeout(reconnectTimer);reconnectTries=0;
   if(session){await session.leave();session=null}
   v.pause();v.removeAttribute('src');v.load();if(hls){hls.destroy();hls=null}
-  curSrc=null;localName=null;hostSeen=false;lastState=null;window.__want=null;role=null;
+  curSrc=null;localName=null;curSub=null;hostSeen=false;lastState=null;lastDrift=0;window.__want=null;role=null;syncStats={};
   $('chat').innerHTML='';$('chatEmpty').classList.remove('hide');
   $('roster').innerHTML='';$('reacts').innerHTML='';
   showMsg('Waiting for the host to pick a video…');
