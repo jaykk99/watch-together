@@ -170,15 +170,30 @@ export default async function handler(req, res) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
-    const r = await fetch(u.toString(), {
-      redirect: 'follow',
-      signal: controller.signal,
-      headers: {
+    // Validate each hop *before* requesting it. Checking only r.url after
+    // automatic redirects is too late: a private host may already be reached.
+    let current = u;
+    let r;
+    for (let hop = 0; hop <= 5; hop++) {
+      if (!/^https?:$/.test(current.protocol) || isPrivateHost(current.hostname)) {
+        return res.status(400).send('Blocked redirect host');
+      }
+      r = await fetch(current.toString(), {
+        redirect: 'manual',
+        signal: controller.signal,
+        headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
-      },
-    });
+        },
+      });
+      if (![301, 302, 303, 307, 308].includes(r.status)) break;
+      if (hop === 5) return res.status(502).send('Too many redirects');
+      const location = r.headers.get('location');
+      if (!location) return res.status(502).send('Redirect missing location');
+      try { current = new URL(location, current); }
+      catch { return res.status(502).send('Bad redirect'); }
+    }
     clearTimeout(timer);
     const ct = r.headers.get('content-type') || '';
     try { if (isPrivateHost(new URL(r.url).hostname)) return res.status(400).send('Blocked host'); } catch { return res.status(502).send('Bad redirect'); }
@@ -189,7 +204,7 @@ export default async function handler(req, res) {
     }
     let html = await r.text();
     if (html.length > 15_000_000) return res.status(502).send('Page too large to proxy');
-    const finalUrl = r.url || u.toString();
+    const finalUrl = current.toString();
     html = stripAds(html, finalUrl);
     html = injectHead(html, finalUrl);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
