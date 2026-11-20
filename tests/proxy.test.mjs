@@ -106,6 +106,41 @@ await ta('rateLimitCheck is per-IP', async () => {
   assert.equal(rateLimitCheck('10.99.0.2'), true, 'different IP unaffected');
 });
 
+
+await ta('redirect to loopback is rejected before the second fetch', async () => {
+  const originalFetch = globalThis.fetch;
+  const visited = [];
+  globalThis.fetch = async (url, options) => {
+    visited.push(url);
+    assert.equal(options.redirect, 'manual');
+    return { status: 302, headers: new Headers({ location: 'http://127.0.0.1/admin' }), url };
+  };
+  try {
+    const res = mockRes();
+    await handler(mockReq('GET', { url: 'https://example.com/start' }, '9.9.9.16'), res);
+    assert.equal(res.statusCode, 400);
+    assert.deepEqual(visited, ['https://example.com/start']);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+await ta('public redirect is followed and relative location resolved', async () => {
+  const originalFetch = globalThis.fetch;
+  const visited = [];
+  globalThis.fetch = async (url, options) => {
+    visited.push(url);
+    assert.equal(options.redirect, 'manual');
+    if (visited.length === 1) return { status: 302, headers: new Headers({ location: '/final' }), url };
+    return { status: 200, headers: new Headers({ 'content-type': 'text/html' }), url, text: async () => '<html><head></head><body>ok</body></html>' };
+  };
+  try {
+    const res = mockRes();
+    await handler(mockReq('GET', { url: 'https://example.com/start' }, '9.9.9.17'), res);
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(visited, ['https://example.com/start', 'https://example.com/final']);
+    assert.match(res.body, /<base href="https:\/\/example.com\/final">/);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
 // The live integration test is opt-in: offline CI and developer test runs
 // should not depend on external DNS or network availability.
 if (process.env.RUN_LIVE_FETCH_TEST === '1') {
