@@ -1,1 +1,8 @@
-{"name":"watch-together","private":true,"scripts":{"test":"node tests/proxy.test.mjs"},"type":"module"}
+{
+  "name": "watch-together",
+  "private": true,
+  "scripts": {
+    "test": "node tests/proxy.test.mjs && node --test tests/sync.test.mjs"
+  },
+  "type": "module"
+}
