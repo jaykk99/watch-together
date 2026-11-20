@@ -106,13 +106,19 @@ await ta('rateLimitCheck is per-IP', async () => {
   assert.equal(rateLimitCheck('10.99.0.2'), true, 'different IP unaffected');
 });
 
-await ta('live fetch example.com -> 200 html', async () => {
-  const res = mockRes();
-  await handler(mockReq('GET', { url: 'https://example.com/' }, '9.9.9.15'), res);
-  assert.equal(res.statusCode, 200);
-  assert.match(res.headers['content-type'], /text\/html/);
-  assert.ok(String(res.body).includes('<base href="https://example.com/'), 'base tag injected');
-  assert.equal(res.headers['x-content-type-options'], 'nosniff');
-});
+// The live integration test is opt-in: offline CI and developer test runs
+// should not depend on external DNS or network availability.
+if (process.env.RUN_LIVE_FETCH_TEST === '1') {
+  await ta('live fetch example.com -> 200 html', async () => {
+    const res = mockRes();
+    await handler(mockReq('GET', { url: 'https://example.com/' }, '9.9.9.15'), res);
+    assert.equal(res.statusCode, 200);
+    assert.match(res.headers['content-type'], /text\/html/);
+    assert.ok(String(res.body).includes('<base href="https://example.com/'), 'base tag injected');
+    assert.equal(res.headers['x-content-type-options'], 'nosniff');
+  });
+} else {
+  console.log('skip - live fetch example.com (set RUN_LIVE_FETCH_TEST=1)');
+}
 
 console.log(`\n${pass} tests passed${process.exitCode ? ' (with failures)' : ''}`);
