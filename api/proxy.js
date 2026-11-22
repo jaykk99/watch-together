@@ -112,7 +112,7 @@ export function stripAds(html, base) {
   return html;
 }
 
-function injectHead(html, base) {
+export function injectHead(html, base) {
   const baseTag = `<base href="${base.replace(/"/g, '&quot;')}">`;
   const css = '<style>[class*="ad-banner"],[class*="ad-container"],[id*="ad-banner"],[id*="ad-container"],[class*="popup-ad"],[id*="popup-ad"],ins.adsbygoogle{display:none!important}</style>';
   if (/<head[^>]*>/i.test(html)) return html.replace(/<head([^>]*)>/i, m => m + baseTag + css);
