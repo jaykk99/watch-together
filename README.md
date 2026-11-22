@@ -30,9 +30,35 @@ Use only sources you have the rights to watch.
 - **Only the host's typed URL syncs.** Since each device loads its own iframe, the viewer can't see clicks or in-page navigation the host makes *inside* the site — only the link the host explicitly enters and hits Go on.
 - **This is effectively an open proxy.** `api/proxy.js` has no auth and will fetch any public http(s) URL (it blocks localhost/private IP ranges as a basic SSRF guard, but nothing else). Anyone who finds the endpoint could use it to fetch arbitrary pages through your Vercel deployment. It is rate-limited to 60 req/min per IP (429 beyond that) to blunt casual abuse — raise, lower, or add auth if that doesn't fit your threat model.
 
+## Deploy (Cloudflare Pages)
+
+Vercel is paused (402), so the live home is Cloudflare Pages:
+
+- Static files (`index.html`, `player.html`, `assets/`) deploy as-is.
+- `api/proxy.js` cannot ship as a static file (it fetches server-side), so
+  `functions/api/proxy.js` rebuilds it as a Pages Function on the same
+  `/api/proxy` route, reusing the pure helpers from `api/proxy.js`
+  (SSRF guards, ad stripping, rate limit). No secrets or env vars needed.
+
+```sh
+npx wrangler pages deploy . --project-name watch-together --branch feat/pages-move
+```
+
+Branch preview: `https://feat-pages-move.watch-together.pages.dev`.
+Production (`https://watch-together.pages.dev`) goes live when this branch
+merges to `main` and a production deploy runs.
+
+## Money path
+
+Free by design today ("No install, no account, no API keys") — no priced
+product yet. A Pro tier needs Jay's call on what it unlocks (candidates:
+custom room codes, longer/host-priority rooms, ad-free proxy). Nothing
+invented here; clearing the Vercel 402 wall keeps the product reachable
+first.
+
 ## Tests
 
-`npm test` — proxy suite (47 tests for `api/proxy.js`: SSRF host blocking in dotted/octal/hex/decimal forms, ad stripping, 405/400/429 paths, per-IP rate limiting, live end-to-end fetch) plus `tests/sync.test.mjs` (19 tests for the sync math in `assets/sync.js`: timestamp projection, drift-decision boundaries, snapshot building, status text).
+`npm test` — proxy suite (47 tests for `api/proxy.js`: SSRF host blocking in dotted/octal/hex/decimal forms, ad stripping, 405/400/429 paths, per-IP rate limiting, live end-to-end fetch) plus `tests/sync.test.mjs` (19 tests for the sync math in `assets/sync.js`: timestamp projection, drift-decision boundaries, snapshot building, status text) plus `tests/pages-proxy.test.mjs` (8 tests for the Pages Function port: 405/400 paths, private-host and private-redirect blocks, ad stripping + base injection, non-HTML passthrough, per-IP 429, honest 502).
 
 ## Setup
 
