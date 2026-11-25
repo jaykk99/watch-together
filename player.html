@@ -142,6 +142,7 @@ function applySub(sub){
   if(!sub||!sub.url)return;
   var tr=document.createElement('track');
   tr.kind='subtitles';tr.srclang='en';tr.label=sub.label||'Subtitles';tr.src=sub.url;
+  tr.crossOrigin='anonymous'; // cross-origin .vtt needs CORS mode or it fails silently
   tr.addEventListener('load',function(){try{tr.track.mode='showing'}catch(e){}});
   v.appendChild(tr);
 }
@@ -285,7 +286,7 @@ async function tryReconnect(){
   var keepCode=$('codeBig').textContent,keepRole=role;
   var keepSrc=curSrc,keepLocal=localName,keepSub=curSub,keepT=v.currentTime,keepBlob=v.getAttribute('src')||v.src||null;
   try{if(session){await session.leave();session=null}}catch(e){}
-  leave();
+  await leave();
   reconnectTries++;
   try{
     await open(keepRole,keepCode);

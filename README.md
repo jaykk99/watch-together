@@ -17,14 +17,14 @@ Use only sources you have the rights to watch.
 ## Proxy guardrails (`api/proxy.js`)
 
 - **Rate limited:** 60 requests/minute per client IP per instance → `429` with `Retry-After: 30` when exceeded.
-- **SSRF hardened:** blocks private/loopback/link-local/multicast/reserved/documentation IPv4 ranges in every encoding — dotted (`127.0.0.1`), short (`127.1`), decimal (`2130706433`), hex (`0x7f000001`), octal (`0177.0.0.1`) — plus `localhost` names and IPv6 unique-local/link-local. The final URL is re-checked after every redirect chain.
+- **SSRF hardened:** blocks private/loopback/link-local/multicast/reserved/documentation IPv4 ranges in every encoding — dotted (`127.0.0.1`), short (`127.1`), decimal (`2130706433`), hex (`0x7f000001`), octal (`0177.0.0.1`) — plus `localhost` names and IPv6 forms (mapped `::ffff:127.0.0.1`, expanded `0:0:0:0:0:0:0:1`, `fe80::/10`, `fc00::/7`, `ff00::/8`, `2001:db8::/32`). Every redirect hop is re-checked before it is requested (max 5 hops), and response bodies are streamed with a 15 MB cap so a huge response can't OOM the function.
 - **Method guard:** non-GET returns `405` with `Allow: GET`.
 - Responses carry `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`.
 
 ## Known limits
 
 - **It's a filter, not a full ad blocker.** `api/proxy.js` strips `<script>`/`<iframe>` tags from a curated list of common ad/tracker domains, known inline ad-loader signatures, and `adsbygoogle` blocks, plus hides common ad-container classes with CSS. Ads injected later by a site's own first-party JavaScript (very common on modern ad networks) aren't caught — only what's present in, or directly loaded from, the initial HTML.
-- **Popups and page-hijack redirects are blocked categorically.** The iframe is sandboxed without `allow-popups` or top-navigation, so `window.open()`, `target="_blank"`, and frame-busting redirect scripts can't fire — this alone kills most of the "ads appear immediately" experience on shady streaming sites, independent of the filter list above.
+- **Popups and page-hijack redirects are blocked categorically.** The iframe is sandboxed without `allow-popups`, `allow-same-origin`, or top-navigation, so `window.open()`, `target="_blank"`, and frame-busting redirect scripts can't fire — this alone kills most of the "ads appear immediately" experience on shady streaming sites, independent of the filter list above. Dropping `allow-same-origin` is deliberate: with it, a proxied page's scripts could reach into the parent room page (same origin). Without it the frame runs as an opaque origin — its scripts still run but can't touch the parent DOM, storage, or session. Pages that need same-origin storage or CORS to their own origin may break; that is the price of embedding arbitrary third-party pages.
 - **Some JS-heavy sites will partially break.** Only the top-level HTML is proxied; other resources (scripts, images, the page's own API calls) still load directly from the real site via an injected `<base>` tag. A site's own AJAX/fetch calls to its own domain become cross-origin from the browser's point of view once served from our domain, so they can fail if that site doesn't send permissive CORS headers — this can break dynamic content (video players that fetch sources via AJAX, comment sections, infinite scroll, etc.) even though the initial page renders.
 - **Logins/sessions usually won't work.** The proxy doesn't persist cookies per visitor, so sites that require being signed in generally won't function correctly.
 - **Only the host's typed URL syncs.** Since each device loads its own iframe, the viewer can't see clicks or in-page navigation the host makes *inside* the site — only the link the host explicitly enters and hits Go on.
@@ -32,7 +32,7 @@ Use only sources you have the rights to watch.
 
 ## Tests
 
-`npm test` — proxy suite (47 tests for `api/proxy.js`: SSRF host blocking in dotted/octal/hex/decimal forms, ad stripping, 405/400/429 paths, per-IP rate limiting, live end-to-end fetch) plus `tests/sync.test.mjs` (19 tests for the sync math in `assets/sync.js`: timestamp projection, drift-decision boundaries, snapshot building, status text).
+`npm test` — proxy suite (46 tests for `api/proxy.js`: SSRF host blocking in dotted/octal/hex/decimal forms, ad stripping, 405/400/429 paths, per-IP rate limiting, live end-to-end fetch) plus `tests/audit-2026-11-25.test.mjs` (45 tests: IPv6 SSRF forms, octal fail-closed, spaced/unquoted ad `src`, capped-body streaming, per-hop redirect checks) plus `tests/sync.test.mjs` (19 tests for the sync math in `assets/sync.js`: timestamp projection, drift-decision boundaries, snapshot building, status text).
 
 ## Setup
 

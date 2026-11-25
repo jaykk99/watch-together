@@ -34,22 +34,34 @@
 
   // ---------- room codes ----------
   function isHostKey(k) { return k.indexOf('host-') === 0; }
+  function sleep(ms) { return new Promise(function (res) { setTimeout(res, ms); }); }
+  async function probeFree(prefix, c) {
+    var probe = sb.channel(prefix + '-' + c, { config: { presence: { key: 'probe-' + Math.random().toString(36).slice(2) } } });
+    var taken = await new Promise(function (res) {
+      var done = false;
+      function finish(v) { if (!done) { done = true; res(v); } }
+      function check() { var s = probe.presenceState(); finish(Object.keys(s).some(isHostKey)); }
+      probe.on('presence', { event: 'sync' }, check);
+      probe.subscribe(function (st) {
+        if (st === 'SUBSCRIBED') setTimeout(check, 700);
+        else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') finish(true);
+      });
+    });
+    await sb.removeChannel(probe);
+    return !taken;
+  }
   async function allocCode(prefix) {
     for (var i = 0; i < 10; i++) {
       var c = String(1000 + rnd(9000));
-      var probe = sb.channel(prefix + '-' + c, { config: { presence: { key: 'probe-' + Math.random().toString(36).slice(2) } } });
-      var taken = await new Promise(function (res) {
-        var done = false;
-        function finish(v) { if (!done) { done = true; res(v); } }
-        function check() { var s = probe.presenceState(); finish(Object.keys(s).some(isHostKey)); }
-        probe.on('presence', { event: 'sync' }, check);
-        probe.subscribe(function (st) {
-          if (st === 'SUBSCRIBED') setTimeout(check, 700);
-          else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') finish(true);
-        });
-      });
-      await sb.removeChannel(probe);
-      if (!taken) return c;
+      if (!(await probeFree(prefix, c))) continue;
+      // Presence is not an atomic claim: two hosts probing the same code at
+      // the same moment both see it free. Re-probe after a random pause so a
+      // concurrent claim usually shows up before we take the code. A true
+      // atomic claim needs a server-side unique constraint (Supabase table),
+      // which this client-only app does not have yet.
+      await sleep(200 + rnd(400));
+      if (!(await probeFree(prefix, c))) continue;
+      return c;
     }
     throw new Error('no free code');
   }

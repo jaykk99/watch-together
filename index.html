@@ -103,7 +103,13 @@ function render(url){
   f.src='/api/proxy?url='+encodeURIComponent(url);
   f.allow='autoplay; fullscreen; encrypted-media; picture-in-picture';
   f.setAttribute('allowfullscreen','');
-  f.setAttribute('sandbox','allow-scripts allow-same-origin allow-forms allow-presentation');
+  // No allow-same-origin: with allow-scripts + allow-same-origin a proxied
+  // page's scripts could reach into the parent room page (same origin).
+  // Without it the frame runs as an opaque origin — scripts still run, but
+  // they cannot touch the parent DOM, storage, or Supabase session.
+  // Trade-off: pages needing same-origin storage/CORS to their own origin
+  // may break; that is the price of embedding arbitrary third-party pages.
+  f.setAttribute('sandbox','allow-scripts allow-forms allow-presentation');
   f.referrerPolicy='no-referrer-when-downgrade';
   f.addEventListener('load',function(){var m=$('stageMsg');if(m)m.remove()});
   stage.appendChild(f);

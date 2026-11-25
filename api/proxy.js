@@ -5,8 +5,9 @@
 //
 // Open-proxy guardrails:
 //  - SSRF: blocks private/loopback/link-local/multicast/reserved/documentation
-//    IPv4 ranges in every encoding (dotted, octal, hex, decimal), plus the
-//    final URL after redirect chains.
+//    IPv4 ranges in every encoding (dotted, octal, hex, decimal) and IPv6
+//    forms (mapped ::ffff:a.b.c.d, expanded loopback, fe80::/10, fc00::/7,
+//    ff00::/8), and re-checks EVERY redirect hop before it is requested.
 //  - Rate limit: 60 requests/minute per client IP (per warm instance), 429
 //    with Retry-After when exceeded.
 
@@ -22,9 +23,12 @@ const AD_INLINE_RE = /adsbygoogle|propellerads|exoclick|popads|popcash|juicyads|
 
 // ---------- SSRF guards ----------
 function numFromPart(p) {
-  // inet_aton style: 0x.. = hex, 0.. = octal, else decimal
+  // inet_aton style: 0x.. = hex, 0.. = octal, else decimal.
+  // A leading-0 part containing 8/9 is NOT valid octal (parseInt('08', 8) === 0
+  // would silently rewrite it) — return NaN so the caller fails closed.
   if (/^0x[0-9a-f]+$/i.test(p)) return parseInt(p, 16);
-  if (/^0[0-9]+$/.test(p)) return parseInt(p, 8);
+  if (/^0[0-7]+$/.test(p)) return parseInt(p, 8);
+  if (/^0[0-9]+$/.test(p)) return NaN;
   if (/^[0-9]+$/.test(p)) return parseInt(p, 10);
   return NaN;
 }
@@ -67,14 +71,7 @@ function inCidr(o, base, bits) {
   return (ip & mask) === (base & mask);
 }
 
-export function isPrivateHost(hostname) {
-  const h = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
-  if (!h) return true;
-  if (h === 'localhost' || /(^|\.)localhost$/.test(h)) return true;
-  if (/^f[cd][0-9a-f]{2}:/i.test(h) || /^fe80:/i.test(h)) return true; // IPv6 unique-local / link-local
-  if (h === '::1' || h === '::') return true;
-  const o = normalizeIpv4(h);
-  if (!o) return false; // not an IP literal — a public DNS name is the caller's risk only insofar as DNS; redirects re-checked
+function isPrivateIpv4(o) {
   return (
     inCidr(o, 0x00000000, 8) ||   // 0.0.0.0/8 (this network)
     inCidr(o, 0x0a000000, 8) ||   // 10.0.0.0/8
@@ -94,6 +91,75 @@ export function isPrivateHost(hostname) {
   );
 }
 
+// Parse an IPv6 literal (brackets already stripped) into 8 16-bit groups, or null.
+// Handles :: compression and a trailing dotted-quad IPv4 tail (::ffff:127.0.0.1).
+export function parseIpv6(host) {
+  let h = host;
+  let tail = null;
+  if (h.includes('.')) {
+    const lastColon = h.lastIndexOf(':');
+    if (lastColon === -1) return null;
+    const quad = normalizeIpv4(h.slice(lastColon + 1));
+    if (!quad) return null;
+    tail = [(quad[0] << 8) | quad[1], (quad[2] << 8) | quad[3]];
+    h = h.slice(0, lastColon);
+  }
+  const dbl = h.indexOf('::');
+  let left = [], right = [];
+  if (dbl !== -1) {
+    if (h.indexOf('::', dbl + 2) !== -1) return null;
+    if (dbl > 0) left = h.slice(0, dbl).split(':');
+    if (dbl + 2 < h.length) right = h.slice(dbl + 2).split(':');
+  } else {
+    left = h.split(':');
+  }
+  const groups = [...left, ...right];
+  if (groups.some(g => !/^[0-9a-f]{1,4}$/i.test(g))) return null;
+  const need = 8 - (tail ? 2 : 0);
+  const leftNums = left.map(g => parseInt(g, 16));
+  const rightNums = right.map(g => parseInt(g, 16));
+  if (dbl === -1) {
+    if (leftNums.length !== need) return null;
+    return tail ? [...leftNums, ...tail] : leftNums;
+  }
+  const zeros = need - leftNums.length - rightNums.length;
+  if (zeros < 1) return null;
+  return [...leftNums, ...Array(zeros).fill(0), ...rightNums, ...(tail || [])];
+}
+
+// A hostname that looks like an IPv4 literal (numeric/hex dotted parts) but
+// failed to parse — block it rather than treating it as a DNS name.
+function looksLikeIpv4Literal(h) {
+  const parts = h.split('.');
+  if (parts.length < 1 || parts.length > 4) return false;
+  return parts.every(p => /^(0x[0-9a-f]+|0[0-9]+|[0-9]+)$/i.test(p));
+}
+
+export function isPrivateHost(hostname) {
+  const h = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  if (!h) return true;
+  if (h === 'localhost' || /(^|\.)localhost$/.test(h)) return true;
+  const v6 = parseIpv6(h);
+  if (v6) {
+    // IPv4-mapped (::ffff:a.b.c.d) and IPv4-compatible (::a.b.c.d) forms:
+    // the embedded IPv4 address decides.
+    if (v6[0] === 0 && v6[1] === 0 && v6[2] === 0 && v6[3] === 0 && v6[4] === 0 && (v6[5] === 0xffff || v6[5] === 0)) {
+      return isPrivateIpv4([(v6[6] >>> 8) & 255, v6[6] & 255, (v6[7] >>> 8) & 255, v6[7] & 255]);
+    }
+    if (v6.every(x => x === 0)) return true; // ::
+    if (v6.slice(0, 7).every(x => x === 0) && v6[7] === 1) return true; // ::1
+    if ((v6[0] & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
+    if ((v6[0] & 0xfe00) === 0xfc00) return true; // fc00::/7 unique-local
+    if ((v6[0] & 0xff00) === 0xff00) return true; // ff00::/8 multicast
+    if (v6[0] === 0x2001 && v6[1] === 0x0db8) return true; // 2001:db8::/32 documentation
+    return false;
+  }
+  if (h.includes(':')) return true; // colon but not valid IPv6 — fail closed
+  const o = normalizeIpv4(h);
+  if (!o) return looksLikeIpv4Literal(h); // not an IP literal — a public DNS name is the caller's risk; redirects re-checked
+  return isPrivateIpv4(o);
+}
+
 export function isAdUrl(rawUrl, base) {
   try {
     const host = new URL(rawUrl, base).hostname.toLowerCase();
@@ -101,11 +167,17 @@ export function isAdUrl(rawUrl, base) {
   } catch { return false; }
 }
 
+// src= with optional whitespace around = and a quoted or unquoted value:
+//   src="..." | src='...' | src=...
+// Groups: 1 = double-quoted, 2 = single-quoted, 3 = unquoted.
+const SRC_ATTR = String.raw`src\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))`;
+function srcFromGroups(dq, sq, uq) { return dq || sq || uq || ''; }
+
 export function stripAds(html, base) {
-  html = html.replace(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>\s*<\/script>/gi, (m, src) => isAdUrl(src, base) ? '' : m);
-  html = html.replace(/<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi, (m, body) => AD_INLINE_RE.test(body) ? '' : m);
-  html = html.replace(/<iframe\b[^>]*\bsrc=["']([^"']+)["'][^>]*>[\s\S]*?<\/iframe>/gi, (m, src) => isAdUrl(src, base) ? '' : m);
-  html = html.replace(/<iframe\b[^>]*\bsrc=["']([^"']+)["'][^>]*\/?>/gi, (m, src) => isAdUrl(src, base) ? '' : m);
+  html = html.replace(new RegExp(`<script\\b[^>]*\\b${SRC_ATTR}[^>]*>\\s*<\\/script>`, 'gi'), (m, dq, sq, uq) => isAdUrl(srcFromGroups(dq, sq, uq), base) ? '' : m);
+  html = html.replace(/<script\b(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi, (m, body) => AD_INLINE_RE.test(body) ? '' : m);
+  html = html.replace(new RegExp(`<iframe\\b[^>]*\\b${SRC_ATTR}[^>]*>[\\s\\S]*?<\\/iframe>`, 'gi'), (m, dq, sq, uq) => isAdUrl(srcFromGroups(dq, sq, uq), base) ? '' : m);
+  html = html.replace(new RegExp(`<iframe\\b[^>]*\\b${SRC_ATTR}[^>]*\\/?>`, 'gi'), (m, dq, sq, uq) => isAdUrl(srcFromGroups(dq, sq, uq), base) ? '' : m);
   html = html.replace(/<ins\b[^>]*\bclass=["'][^"']*adsbygoogle[^"']*["'][^>]*>[\s\S]*?<\/ins>/gi, '');
   html = html.replace(/<meta\b[^>]*http-equiv=["']refresh["'][^>]*>/gi, '');
   html = html.replace(/<meta\b[^>]*http-equiv=["']Content-Security-Policy["'][^>]*>/gi, '');
@@ -147,6 +219,57 @@ function clientIp(req) {
   return first || (req.headers && req.headers['x-real-ip']) || (req.socket && req.socket.remoteAddress) || 'unknown';
 }
 
+// ---------- bounded fetch ----------
+// Bodies are streamed with a hard cap instead of buffered whole: a multi-GB
+// response used to OOM the function (arrayBuffer()/text() with no limit).
+export const MAX_BODY_BYTES = 15_000_000;
+export const MAX_REDIRECTS = 5;
+
+// Read a fetch Response body up to MAX_BODY_BYTES; returns null when the
+// body is larger (checked via Content-Length first, then while streaming).
+export async function readCappedBody(r) {
+  const len = Number(r.headers.get('content-length'));
+  if (Number.isFinite(len) && len > MAX_BODY_BYTES) return null;
+  const body = r.body;
+  if (!body || typeof body.getReader !== 'function') {
+    const buf = Buffer.from(await r.arrayBuffer());
+    return buf.length > MAX_BODY_BYTES ? null : buf;
+  }
+  const reader = body.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) {
+      total += value.byteLength;
+      if (total > MAX_BODY_BYTES) { try { await reader.cancel(); } catch {} return null; }
+      chunks.push(value);
+    }
+  }
+  return Buffer.concat(chunks);
+}
+
+// Fetch with redirects followed manually so EVERY hop is checked against the
+// SSRF guard before it is requested (fetch's built-in follow only lets the
+// final URL be checked, so an intermediate hop to a private host still fired).
+async function fetchChecked(startUrl, init, signal) {
+  let current = startUrl;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const r = await fetch(current.toString(), { ...init, redirect: 'manual', signal });
+    if (r.status < 300 || r.status >= 400) return r;
+    const loc = r.headers.get('location');
+    if (!loc) return r;
+    if (hop === MAX_REDIRECTS) return null; // too many redirects
+    let next;
+    try { next = new URL(loc, current); } catch { return null; }
+    if (!/^https?:$/.test(next.protocol)) return null;
+    if (isPrivateHost(next.hostname)) return 'blocked';
+    current = next;
+  }
+  return null;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -170,27 +293,26 @@ export default async function handler(req, res) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
-    const r = await fetch(u.toString(), {
-      redirect: 'follow',
-      signal: controller.signal,
+    const r = await fetchChecked(u, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
       },
-    });
+    }, controller.signal);
     clearTimeout(timer);
+    if (r === 'blocked') return res.status(400).send('Blocked host');
+    if (r === null) return res.status(502).send('Bad redirect');
     const ct = r.headers.get('content-type') || '';
     try { if (isPrivateHost(new URL(r.url).hostname)) return res.status(400).send('Blocked host'); } catch { return res.status(502).send('Bad redirect'); }
+    const buf = await readCappedBody(r);
+    if (buf === null) return res.status(502).send('Page too large to proxy');
     if (!ct.includes('text/html')) {
-      const buf = Buffer.from(await r.arrayBuffer());
       res.setHeader('Content-Type', ct || 'application/octet-stream');
       return res.status(r.status).send(buf);
     }
-    let html = await r.text();
-    if (html.length > 15_000_000) return res.status(502).send('Page too large to proxy');
     const finalUrl = r.url || u.toString();
-    html = stripAds(html, finalUrl);
+    let html = stripAds(buf.toString('utf-8'), finalUrl);
     html = injectHead(html, finalUrl);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.status(200).send(html);
