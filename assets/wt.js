@@ -34,6 +34,18 @@
 
   // ---------- room codes ----------
   function isHostKey(k) { return k.indexOf('host-') === 0; }
+  // Does a presence state contain a host? Checks the tracked role, not just
+  // the key prefix: a promoted host keeps its original `viewer-...` key
+  // (Supabase presence keys are fixed at channel creation), so a key-only
+  // check misses it and the code looks free to a new host, who then claims
+  // the same room and splits it between two hosts.
+  function presenceHasHost(state) {
+    return Object.keys(state || {}).some(function (k) {
+      if (isHostKey(k)) return true;
+      var metas = state[k] || [];
+      return metas.some(function (m) { return m && m.role === 'host'; });
+    });
+  }
   async function allocCode(prefix) {
     for (var i = 0; i < 10; i++) {
       var c = String(1000 + rnd(9000));
@@ -41,7 +53,7 @@
       var taken = await new Promise(function (res) {
         var done = false;
         function finish(v) { if (!done) { done = true; res(v); } }
-        function check() { var s = probe.presenceState(); finish(Object.keys(s).some(isHostKey)); }
+        function check() { var s = probe.presenceState(); finish(presenceHasHost(s)); }
         probe.on('presence', { event: 'sync' }, check);
         probe.subscribe(function (st) {
           if (st === 'SUBSCRIBED') setTimeout(check, 700);
@@ -228,7 +240,7 @@
   window.WT = {
     sb: sb, $: $, toast: toast,
     getName: getName, setName: setName, displayName: displayName,
-    allocCode: allocCode, openRoom: openRoomStrict,
+    allocCode: allocCode, presenceHasHost: presenceHasHost, openRoom: openRoomStrict,
     addChat: addChat, renderRoster: renderRoster, bindChat: bindChat,
     floatReact: floatReact, bindReacts: bindReacts,
     copyText: copyText, inviteLink: inviteLink, prefillFromQuery: prefillFromQuery,

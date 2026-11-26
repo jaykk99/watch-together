@@ -2,7 +2,7 @@
   "name": "watch-together",
   "private": true,
   "scripts": {
-    "test": "node tests/proxy.test.mjs && node --test tests/sync.test.mjs"
+    "test": "node tests/proxy.test.mjs && node --test tests/sync.test.mjs && node --test tests/wt-room.test.mjs"
   },
   "type": "module"
 }

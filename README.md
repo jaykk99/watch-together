@@ -32,7 +32,7 @@ Use only sources you have the rights to watch.
 
 ## Tests
 
-`npm test` — proxy suite (47 tests for `api/proxy.js`: SSRF host blocking in dotted/octal/hex/decimal forms, ad stripping, 405/400/429 paths, per-IP rate limiting, live end-to-end fetch) plus `tests/sync.test.mjs` (19 tests for the sync math in `assets/sync.js`: timestamp projection, drift-decision boundaries, snapshot building, status text).
+`npm test` — proxy suite (46 tests for `api/proxy.js`: SSRF host blocking in dotted/octal/hex/decimal forms, ad stripping, 405/400/429 paths, per-IP rate limiting, live end-to-end fetch) plus `tests/sync.test.mjs` (19 tests for the sync math in `assets/sync.js`: timestamp projection, drift-decision boundaries, snapshot building, status text) plus `tests/wt-room.test.mjs` (18 tests: single-part octal SSRF guard, HTML error-status passthrough, unquoted ad/meta stripping, subtitle-clear sync, promoted-host room-code probe).
 
 ## Setup
 

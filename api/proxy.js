@@ -34,7 +34,17 @@ export function normalizeIpv4(host) {
   const h = host.toLowerCase();
   const parts = h.split('.');
   if (parts.length === 1 && /^[0-9]+$/.test(parts[0])) {
-    const n = Number(parts[0]);
+    // WHATWG URL: a leading 0 means octal, not decimal — '017700000001'
+    // is 127.0.0.1 to the URL parser, while Number() reads 17700000001
+    // (past the 32-bit cap, so the old code let it straight through).
+    let n;
+    const p = parts[0];
+    if (p.length > 1 && p[0] === '0') {
+      if (/[89]/.test(p)) return null; // invalid octal — the URL parser rejects it too
+      n = parseInt(p, 8);
+    } else {
+      n = Number(p);
+    }
     if (!Number.isSafeInteger(n) || n < 0 || n > 0xffffffff) return null;
     return [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
   }
@@ -106,9 +116,9 @@ export function stripAds(html, base) {
   html = html.replace(/<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi, (m, body) => AD_INLINE_RE.test(body) ? '' : m);
   html = html.replace(/<iframe\b[^>]*\bsrc=["']([^"']+)["'][^>]*>[\s\S]*?<\/iframe>/gi, (m, src) => isAdUrl(src, base) ? '' : m);
   html = html.replace(/<iframe\b[^>]*\bsrc=["']([^"']+)["'][^>]*\/?>/gi, (m, src) => isAdUrl(src, base) ? '' : m);
-  html = html.replace(/<ins\b[^>]*\bclass=["'][^"']*adsbygoogle[^"']*["'][^>]*>[\s\S]*?<\/ins>/gi, '');
-  html = html.replace(/<meta\b[^>]*http-equiv=["']refresh["'][^>]*>/gi, '');
-  html = html.replace(/<meta\b[^>]*http-equiv=["']Content-Security-Policy["'][^>]*>/gi, '');
+  html = html.replace(/<ins\b[^>]*\bclass\s*=\s*(?:"[^"]*adsbygoogle[^"]*"|'[^']*adsbygoogle[^']*'|[^\s>]*adsbygoogle[^\s>]*)[^>]*>[\s\S]*?<\/ins>/gi, '');
+  html = html.replace(/<meta\b[^>]*http-equiv\s*=\s*(?:"refresh"|'refresh'|refresh(?=[\s>\/]))[^>]*>/gi, '');
+  html = html.replace(/<meta\b[^>]*http-equiv\s*=\s*(?:"Content-Security-Policy"|'Content-Security-Policy'|Content-Security-Policy(?=[\s>\/]))[^>]*>/gi, '');
   return html;
 }
 
@@ -193,7 +203,7 @@ export default async function handler(req, res) {
     html = stripAds(html, finalUrl);
     html = injectHead(html, finalUrl);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    return res.status(200).send(html);
+    return res.status(r.status).send(html); // pass the upstream status through — a 404 page is not a 200
   } catch (e) {
     clearTimeout(timer);
     return res.status(502).send('Could not load that page: ' + String((e && e.message) || e).slice(0, 200));

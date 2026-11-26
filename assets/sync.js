@@ -73,6 +73,16 @@
     return { cls: '', text: 'syncing…' };
   }
 
+  // Should the viewer (re)apply subtitles for an incoming state?
+  // Covers the clear case too: when the host clears subtitles (next is
+  // null) the viewer must drop its track — the old call-site check
+  // `if (s.sub && ...)` never fired on a clear, so viewers kept stale subs.
+  function subChanged(curSub, nextSub) {
+    if (!nextSub) return !!curSub;
+    if (!curSub) return true;
+    return curSub.url !== nextSub.url;
+  }
+
   return {
     HARD_SEEK_S: HARD_SEEK_S,
     NUDGE_S: NUDGE_S,
@@ -81,5 +91,6 @@
     correctionDecision: correctionDecision,
     snapshot: snapshot,
     statusText: statusText,
+    subChanged: subChanged,
   };
 });

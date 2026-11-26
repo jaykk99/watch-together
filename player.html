@@ -163,7 +163,7 @@ function applyState(s){
   if(!s.paused&&v.paused){
     v.play().then(function(){$('tapPlay').classList.add('hide')}).catch(function(){$('tapPlay').classList.remove('hide')});
   }
-  if(s.sub&&(!curSub||curSub.url!==s.sub.url))applySub(s.sub);
+  if(WTSync.subChanged(curSub, s.sub))applySub(s.sub);
   var st=WTSync.statusText(dec,s.paused);
   $('syncDot').className='dot'+(st.cls?' '+st.cls:'');
   $('syncTxt').textContent=st.text;
